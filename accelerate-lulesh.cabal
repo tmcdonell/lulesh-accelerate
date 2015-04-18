@@ -1,0 +1,36 @@
+name:                   accelerate-lulesh
+version:                0.1.0.0
+synopsis:               Accelerate implementation of LULESH
+description:
+    Implementation of Livermore Unstructure Lagrangian Explicit Shock
+    Hydronamics (LULESH) application using Accelerate.
+    .
+    LULESH represents a typical hydrodynamics code such as
+    <https://wci.llnl.gov/simulation/computer-codes/ale3d ALE3D>, but is a
+    highly simplified application, hard-coded to solve the Sedov blast problem
+    on an unstructured hexahedron mesh. For more information on what LULESH
+    models see:
+    .
+      <https://codesign.llnl.gov/lulesh.php>
+    .
+      <<https://codesign.llnl.gov/images/ale3d.gif>>
+
+homepage:               https://github.com/AccelerateHS/accelerate/
+license:                BSD3
+license-file:           LICENSE
+author:                 Trevor L. McDonell
+maintainer:             tmcdonell@cse.unsw.edu.au
+copyright:              Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
+-- category:
+build-type:             Simple
+-- extra-source-files:
+cabal-version:          >=1.10
+
+executable accelerate-lulesh
+  main-is:              Main.hs
+  hs-source-dirs:       src
+  default-language:     Haskell2010
+  build-depends:
+      base              >= 4.6
+
+-- vim: nospell
