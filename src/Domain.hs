@@ -1,18 +1,14 @@
+{-# LANGUAGE RecordWildCards #-}
 
 module Domain where
 
 import Options
 
-import Prelude                          as P
-import Data.Array.Accelerate            as A
+import Prelude                                  as P
+import Data.Array.Accelerate                    as A
 
-type R = Double                         -- Floating point representation
-type I = Int32                          -- array subscript and loop index
-
-data Error
-  = Volume
-  | QStop
-  deriving (Eq, Enum, Show)
+type R = Double         -- Floating point representation
+type I = Int32          -- Indices and subscripts
 
 
 -- The domain is the primary data structure for LULESH.
@@ -30,12 +26,11 @@ data Error
 -- number of elements, where the computation is defined over the same physical
 -- volume of space.
 --
-
 data Domain = Domain
   {
     -- Node centred
     -- ------------
-    coordinate          :: Vector (R,R,R)       -- (x, y, z)
+    mesh                :: Array DIM3 (R,R,R)   -- (x, y, z)
   , velocity            :: Vector (R,R,R)       -- (xd, yd, zd)
   , acceleration        :: Vector (R,R,R)       -- (xdd, ydd, zdd)
   , force               :: Vector (R,R,R)       -- (fx, fy, fz)
@@ -55,7 +50,7 @@ data Domain = Domain
 --   ... element connectivity across each face
 --   ... symmetric/free surface flags for each element face
 
-  , energy              :: Vector R             -- e
+  , energy              :: Array DIM3 R         -- e            -- Array DIM3 R
   , pressure            :: Vector R             -- p
   , viscosity           :: Vector R             -- q
   , viscosity_linear    :: Vector R             -- ql
@@ -86,7 +81,6 @@ data Domain = Domain
     -- Other constants
     -- ---------------
   , hgcoef              :: R                    -- hourglass coefficient
-  , ss4o3               :: R
   , qstop               :: R                    -- excessive viscosity indicator
   , monoq_max_slope     :: R
   , monoq_limiter       :: R
@@ -104,9 +98,9 @@ data Domain = Domain
     -- --------------------
   , iteration           :: Int                  -- simulation iteration
   , time                :: R                    -- current simulation time
-  , time_stop           :: R                    -- simulation stop time
+  , time_end            :: R                    -- simulation stop time
   , dt                  :: R                    -- variable time increment
-  , dt_mult_bounds      :: (R,R)                -- lower and upper bounds to scale dt by
+  , dt_scaling          :: (R,R)                -- lower and upper bounds to scale dt by
   , dt_max              :: R                    -- maximum allowable time increment
   , dt_courant          :: R                    -- courant constraint
   , dt_hydro            :: R                    -- volume change constraint
@@ -117,5 +111,82 @@ data Domain = Domain
 -- Initialise a domain with the starting configuration
 --
 initDomain :: Options -> Domain
-initDomain = error "TODO: initDomain"
+initDomain Options{..} =
+  let
+--      edgeElems         = optSize
+--      edgeNodes         = optSize + 1
+--
+--      numElems          = edgeElems * edgeElems * edgeElems
+--      numNodes          = edgeNodes * edgeNodes * edgeNodes
+  in
+  Domain
+  {
+    -- node centred
+    mesh                = initMesh optSize
+
+    -- element centred
+  , energy              = initEnergy optSize
+
+    -- constants
+  , e_cut               = 1.0e-7
+  , p_cut               = 1.0e-7
+  , q_cut               = 1.0e-7
+  , u_cut               = 1.0e-7
+  , v_cut               = 1.0e-7
+
+  , hgcoef              = 3.0
+  , qstop               = 1.0e12
+  , monoq_max_slope     = 1.0
+  , monoq_limiter       = 2.0
+  , qlc_monoq           = 0.5
+  , qqc_monoq           = 2.0/3.0
+  , qqc                 = 2.0
+  , eosvmax             = 1.0e+9
+  , eosvmin             = 1.0e-9
+  , pmin                = 0
+  , emin                = -1.0e15
+  , dvovmax             = 0.1
+  , refdens             = 1.0
+
+    -- simulation parameters
+  , iteration           = 0
+  , time                = 0
+  , time_end            = 1.0e-2
+  , dt                  = 1.0e-7
+  , dt_scaling          = (1.1, 1.2)
+  , dt_max              = 1.0e-2
+  , dt_courant          = 1.0e20
+  , dt_hydro            = 1.0e20
+  }
+
+
+-- Deposit some energy at the origin. The simulation is symmetric and we only
+-- simulate one quadrant, being sure to maintain the boundary conditions.
+--
+initEnergy :: Int -> Array DIM3 R
+initEnergy numEdges
+  = fromFunction (Z :. numEdges :. numEdges :. numEdges)
+  $ \ix -> case ix of
+             Z :. 0 :. 0 :. 0 -> 3.948746e+7
+             _                -> 0
+
+-- Initialise the nodal coordinates to a regular hexahedron mesh. The
+-- coordinates of the mesh nodes will change as the simulation progresses.
+--
+-- We don't need the nodal point lattice to record the indices of our neighbours
+-- because we have native multidimensional arrays.
+--
+initMesh :: Int -> Array DIM3 (R,R,R)
+initMesh numEdges
+  = let numNodes                = numEdges + 1
+        n                       = P.fromIntegral numEdges
+        f (Z :. k :. j :. i)    =
+          let x = 1.125 * P.fromIntegral i / n
+              y = 1.125 * P.fromIntegral j / n
+              z = 1.125 * P.fromIntegral k / n
+          in
+          (x, y, z)
+    in
+    fromFunction (Z :. numNodes :. numNodes :. numNodes) f
+
 
