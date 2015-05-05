@@ -2,13 +2,26 @@
 
 module Domain where
 
+import Type
 import Options
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
+import Data.Array.Accelerate.Linear
 
-type R = Double         -- Floating point representation
-type I = Int32          -- Indices and subscripts
+-- The size of the simulation box
+--
+_WIDTH, _HEIGHT, _DEPTH :: Fractional a => a
+_WIDTH  = 1.125
+_HEIGHT = 1.125
+_DEPTH  = 1.125
+
+
+-- TODO: Pack the node-centred / elem-centred fields into a data structure
+--
+-- type Vec3 a = (a,a,a)
+-- type Node a = (Vec3 a, Vec3 a, Vec3 a, Vec3 a, a)
+-- type Elem a = (a, a, Vec3 a, a, a, a, a, a, a)
 
 
 -- The domain is the primary data structure for LULESH.
@@ -30,12 +43,13 @@ data Domain = Domain
   {
     -- Node centred
     -- ------------
-    mesh                :: Array DIM3 (R,R,R)   -- (x, y, z)
-  , velocity            :: Vector (R,R,R)       -- (xd, yd, zd)
-  , acceleration        :: Vector (R,R,R)       -- (xdd, ydd, zdd)
-  , force               :: Vector (R,R,R)       -- (fx, fy, fz)
-  , nodalMass           :: Vector R
-  , symmetry            :: Vector (I,I,I)       -- symmetry plane nodesets
+    mesh                :: Field Point          -- (x, y, z)
+  , velocity            :: Array DIM3 (V3 R)    -- (xd, yd, zd)
+  , acceleration        :: Array DIM3 (V3 R)    -- (xdd, ydd, zdd)
+  , force               :: Array DIM3 (V3 R)    -- (fx, fy, fz)
+  , nodeMass            :: Array DIM3 R
+
+--  , symmetry            :: Vector (I,I,I)       -- symmetry plane nodesets
 
     -- Element centred
     -- ---------------
@@ -50,25 +64,27 @@ data Domain = Domain
 --   ... element connectivity across each face
 --   ... symmetric/free surface flags for each element face
 
-  , energy              :: Array DIM3 R         -- e            -- Array DIM3 R
-  , pressure            :: Vector R             -- p
-  , viscosity           :: Vector R             -- q
-  , viscosity_linear    :: Vector R             -- ql
-  , viscosity_quadratic :: Vector R             -- qq
+  , energy              :: Array DIM3 R         -- e
+  , pressure            :: Field Pressure       -- p
+  , viscosity           :: Field Viscosity      -- (qq, ql, q)
+
+--  , viscosity           :: Array DIM3 R         -- q
+--  , viscosity_linear    :: Vector R             -- ql
+--  , viscosity_quadratic :: Vector R             -- qq
     -- TLM: viscosity = qq^2 + ql + q ??
 
-  , volume              :: Vector R             -- v (relative)
-  , volume_ref          :: Vector R             -- volo
-  , volume_dov          :: Vector R             -- volume derivative over volume
+  , volume              :: Field Volume         -- v (relative)
+  , volume_ref          :: Array DIM3 R         -- volo (reference volume)
+  , volume_dov          :: Array DIM3 R         -- volume derivative over volume
 
-  , arealg              :: Vector R             -- characteristic length of an element
+  , arealg              :: Array DIM3 R         -- characteristic length of an element
 
     -- Courant-Friedrichs-Lewy (CFL) condition determines the maximum size of
     -- each time increment based on the shortest distance across any mesh
     -- element, and the speed of sound in the material of that element.
-  , ss                  :: Vector R             -- "speed of sound"
+  , ss                  :: Array DIM3 R         -- "speed of sound"
 
-  , elemMass            :: Vector R             -- mass
+  , elemMass            :: Array DIM3 R         -- mass
 
     -- Cutoffs (constants)
     -- -------------------
@@ -113,19 +129,36 @@ data Domain = Domain
 initDomain :: Options -> Domain
 initDomain Options{..} =
   let
---      edgeElems         = optSize
---      edgeNodes         = optSize + 1
---
---      numElems          = edgeElems * edgeElems * edgeElems
---      numNodes          = edgeNodes * edgeNodes * edgeNodes
+      numElem   = optSize
+      numNode   = numElem + 1
+
+      ev        = initElemVolume numElem
+      efill v   = fromFunction (Z :. numElem :. numElem :. numElem) (const v)
+      nfill v   = fromFunction (Z :. numNode :. numNode :. numNode) (const v)
+
+      n000      = nfill (V3 0 0 0)
+      e000      = efill (V3 0 0 0)
+      e0        = efill 0
   in
   Domain
   {
     -- node centred
-    mesh                = initMesh optSize
+    mesh                = initMesh numElem
+  , velocity            = n000
+  , acceleration        = n000
+  , force               = n000
+  , nodeMass            = initNodeMass numElem
 
     -- element centred
-  , energy              = initEnergy optSize
+  , energy              = initEnergy numElem
+  , pressure            = e0
+  , viscosity           = e000
+  , volume              = efill 1
+  , volume_ref          = ev
+  , volume_dov          = e0
+  , arealg              = e0
+  , ss                  = e0
+  , elemMass            = ev
 
     -- constants
   , e_cut               = 1.0e-7
@@ -163,9 +196,9 @@ initDomain Options{..} =
 -- Deposit some energy at the origin. The simulation is symmetric and we only
 -- simulate one quadrant, being sure to maintain the boundary conditions.
 --
-initEnergy :: Int -> Array DIM3 R
-initEnergy numEdges
-  = fromFunction (Z :. numEdges :. numEdges :. numEdges)
+initEnergy :: (Elt a, Fractional a) => Int -> Array DIM3 a
+initEnergy numElem
+  = fromFunction (Z :. numElem :. numElem :. numElem)
   $ \ix -> case ix of
              Z :. 0 :. 0 :. 0 -> 3.948746e+7
              _                -> 0
@@ -176,17 +209,63 @@ initEnergy numEdges
 -- We don't need the nodal point lattice to record the indices of our neighbours
 -- because we have native multidimensional arrays.
 --
-initMesh :: Int -> Array DIM3 (R,R,R)
-initMesh numEdges
-  = let numNodes                = numEdges + 1
-        n                       = P.fromIntegral numEdges
+initMesh :: (Elt a, Fractional a) => Int -> Array DIM3 (V3 a)
+initMesh numElem
+  = let numNode                 = numElem + 1
+        n                       = P.fromIntegral numElem
         f (Z :. k :. j :. i)    =
-          let x = 1.125 * P.fromIntegral i / n
-              y = 1.125 * P.fromIntegral j / n
-              z = 1.125 * P.fromIntegral k / n
+          let x = _WIDTH  * P.fromIntegral i / n
+              y = _HEIGHT * P.fromIntegral j / n
+              z = _DEPTH  * P.fromIntegral k / n
           in
-          (x, y, z)
+          V3 x y z
     in
-    fromFunction (Z :. numNodes :. numNodes :. numNodes) f
+    fromFunction (Z :. numNode :. numNode :. numNode) f
 
+-- Initialise the volume of each element.
+--
+-- Since we begin with a regular hexahedral mesh we just compute the volume
+-- directly and initialise all elements to that value.
+--
+initElemVolume :: (Elt a, Fractional a) => Int -> Array DIM3 a
+initElemVolume numElem
+  = let w = _WIDTH  / P.fromIntegral numElem
+        h = _HEIGHT / P.fromIntegral numElem
+        d = _DEPTH  / P.fromIntegral numElem
+        v = w * h * d
+    in
+    fromFunction (Z :. numElem :. numElem :. numElem) (const v)
+
+-- Initialise the mass at each node. This is the average of the contribution of
+-- each of the surrounding elements.
+--
+-- Again, since we begin with a regular mesh, we just compute this value directly.
+--
+initNodeMass :: (Elt a, Fractional a) => Int -> Array DIM3 a
+initNodeMass numElem
+  = let numNode = numElem + 1
+
+        w = _WIDTH  / P.fromIntegral numElem
+        h = _HEIGHT / P.fromIntegral numElem
+        d = _DEPTH  / P.fromIntegral numElem
+        v = w * h * d
+
+        at (Z :. z :. y :. x) =
+          if 0 <= z && z < numElem && 0 <= y && y < numElem && 0 <= x && x < numElem
+             then v
+             else 0
+
+        -- This corresponds to the node -> surrounding elements index mapping
+        neighbours (Z :. z :. y :. x)
+          = ( at (Z :. z   :. y   :. x)
+            + at (Z :. z   :. y   :. x-1)
+            + at (Z :. z   :. y-1 :. x-1)
+            + at (Z :. z   :. y-1 :. x)
+            + at (Z :. z-1 :. y   :. x)
+            + at (Z :. z-1 :. y   :. x-1)
+            + at (Z :. z-1 :. y-1 :. x-1)
+            + at (Z :. z-1 :. y-1 :. x)
+            ) / 8
+    in
+    fromFunction (Z :. numNode :. numNode :. numNode) neighbours
 
