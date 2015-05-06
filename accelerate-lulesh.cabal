@@ -23,14 +23,20 @@ maintainer:             tmcdonell@cse.unsw.edu.au
 copyright:              Trevor L. McDonell <tmcdonell@cse.unsw.edu.au>
 -- category:
 build-type:             Simple
--- extra-source-files:
+extra-doc-files:        images/nodes.png
 cabal-version:          >=1.10
 
 executable accelerate-lulesh
   main-is:              Main.hs
+  other-modules:        LULESH
+                        Domain
+
   hs-source-dirs:       src
   default-language:     Haskell2010
   build-depends:
-      base              >= 4.6
+      base                      >= 4.6
+    , accelerate                >= 0.15
+    , lens-accelerate           >= 0.1
+    , linear-accelerate         >= 0.3
 
 -- vim: nospell
