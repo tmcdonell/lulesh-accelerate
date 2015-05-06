@@ -6,10 +6,9 @@ module LULESH where
 import Type
 
 import Prelude                                          as P
-import Control.Lens                                     as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
 import Data.Array.Accelerate                            as A
-import Data.Array.Accelerate.Linear
-import Data.Array.Accelerate.Control.Lens.Tuple         ()
+import Data.Array.Accelerate.Linear                     as L
+import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
 
 
 -- | Get the indices of the nodes surrounding the element at a given index. This
@@ -73,11 +72,11 @@ calcVolumeForceForElems :: ()
 calcVolumeForceForElems =
   let
       -- Sum contributions to total stress tensor
-      sigma     = initStressTermsForElems undefined undefined
+      -- sigma     = initStressTermsForElems undefined undefined
 
       -- call elemlib stress integration loop to produce nodal forces from
       -- material stresses
-      _         = integrateStressForElems sigma
+      -- _         = integrateStressForElems sigma
   in
   ()
 
@@ -98,16 +97,32 @@ initStressTermsForElems =
 -- | Integrate the volumetric stress contributions for each element.
 --
 integrateStressForElems
-    :: Acc (Field Sigma)
-    -> ()
-integrateStressForElems _sigma =
+    :: Exp (Hexahedron Point)
+    -> Exp Sigma
+    -> Exp (Hexahedron Force)
+integrateStressForElems p sigma =
   let
       -- Volume calculation involves extra work for numerical consistency
-      -- det    = calcElemShapeFunctionDerivatives pt ^._1
-      -- b      = calcElemNodeNormals pt
-      -- f      = sumElemStressesToNodeForces b stress
+      det    = calcElemShapeFunctionDerivatives p ^._1
+      b      = calcElemNodeNormals p
+      f      = sumElemStressesToNodeForces b sigma
+
+      -- At this point, the forces at each of the corners of the hexahedron
+      -- defining this element would be distributed to the nodal mesh. This
+      -- corresponds to a global scatter operation.
+      --
+      -- Instead, we define the problem over the nodal mesh. At each node, visit
+      -- the (up to) eight surrounding elements, and calculate the contribution
+      -- from that element at this node.
   in
-  ()
+  f
+
+{--
+integrateStressForNode
+    :: Acc (Field Pressure)
+    -> Acc (Field Viscosity)
+    -> 
+--}
 
 
 calcElemShapeFunctionDerivatives
@@ -161,31 +176,43 @@ surfaceElemFaceNormal p =
 
 calcElemNodeNormals
     :: Exp (Hexahedron Point)
-    -> Exp Normal
+    -> Exp (Hexahedron Normal)
 calcElemNodeNormals p =
   let
+      -- calculate the normal to each of the 6 faces of the hexahedron
+      n0123     = surfaceElemFaceNormal (lift (p^._0, p^._1, p^._2, p^._3))
+      n0451     = surfaceElemFaceNormal (lift (p^._0, p^._4, p^._5, p^._1))
+      n1562     = surfaceElemFaceNormal (lift (p^._1, p^._5, p^._6, p^._2))
+      n2673     = surfaceElemFaceNormal (lift (p^._2, p^._6, p^._7, p^._3))
+      n3740     = surfaceElemFaceNormal (lift (p^._3, p^._7, p^._4, p^._0))
+      n4765     = surfaceElemFaceNormal (lift (p^._4, p^._7, p^._6, p^._5))
+
+      -- The normal at each node is the sum of the normals of the three faces
+      -- that meet at that node
   in
-  P.sum [ surfaceElemFaceNormal (lift (p^._0, p^._1, p^._2, p^._3))
-        , surfaceElemFaceNormal (lift (p^._0, p^._4, p^._5, p^._1))
-        , surfaceElemFaceNormal (lift (p^._1, p^._5, p^._6, p^._2))
-        , surfaceElemFaceNormal (lift (p^._2, p^._6, p^._7, p^._3))
-        , surfaceElemFaceNormal (lift (p^._3, p^._7, p^._4, p^._0))
-        , surfaceElemFaceNormal (lift (p^._4, p^._7, p^._6, p^._5))
-        ]
+  lift ( n0123 + n0451 + n3740
+       , n0123 + n0451 + n1562
+       , n0123 + n1562 + n2673
+       , n0123 + n2673 + n3740
+       , n0451 + n3740 + n4765
+       , n0451 + n1562 + n4765
+       , n1562 + n2673 + n4765
+       , n2673 + n3740 + n4765
+       )
 
 
 sumElemStressesToNodeForces
     :: Exp (Hexahedron Normal)
     -> Exp Sigma
     -> Exp (Hexahedron Force)
-sumElemStressesToNodeForces pf stress =
-  lift ( - stress * pf^._0
-       , - stress * pf^._1
-       , - stress * pf^._2
-       , - stress * pf^._3
-       , - stress * pf^._4
-       , - stress * pf^._5
-       , - stress * pf^._6
-       , - stress * pf^._7
+sumElemStressesToNodeForces pf sigma =
+  lift ( - sigma * pf^._0
+       , - sigma * pf^._1
+       , - sigma * pf^._2
+       , - sigma * pf^._3
+       , - sigma * pf^._4
+       , - sigma * pf^._5
+       , - sigma * pf^._6
+       , - sigma * pf^._7
        )
 
