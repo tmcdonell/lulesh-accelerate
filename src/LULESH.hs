@@ -65,7 +65,9 @@ calcForceForNodes = ()
 -- main steps are:
 --
 --  1. Initialise stress terms for each element
+--
 --  2. Integrate the volumetric stress terms for each element
+--
 --  3. Calculate the hourglass control contribution for each element.
 --
 calcVolumeForceForElems :: ()
@@ -125,6 +127,9 @@ integrateStressForNode
 --}
 
 
+-- Calculate the shape function derivative for the element. This is used to
+-- compute the velocity gradient of the element.
+--
 calcElemShapeFunctionDerivatives
     :: Exp (Hexahedron Point)                   -- node coordinates bounding this hexahedron
     -> Exp (Hexahedron Normal, Volume)          -- (shape function derivatives, jacobian determinant (volume))
@@ -137,11 +142,12 @@ calcElemShapeFunctionDerivatives p =
       d42       = p^._4 - p^._2
 
       -- what is this??
+      -- 0.125 = 1/6
       fjxi      = 0.125 * ( d60 + d53 - d71 - d42 )
       fjet      = 0.125 * ( d60 - d53 + d71 - d42 )
       fjze      = 0.125 * ( d60 + d53 + d71 + d42 )
 
-      -- calculate cofactors
+      -- calculate cofactors (= determinant??)
       cjxi      =         cross fjet fjze
       cjet      = negate (cross fjxi fjze)
       cjze      =         cross fjxi fjet
@@ -163,23 +169,36 @@ calcElemShapeFunctionDerivatives p =
   lift ((b0, b1, b2, b3, b4, b5, b6, b7), volume)
 
 
-surfaceElemFaceNormal
-    :: Exp (Quad Point)
-    -> Exp Normal
-surfaceElemFaceNormal p =
-  let
-      bisectx   = 0.5 * (p^._3 + p^._2 - p^._1 - p^._0)
-      bisecty   = 0.5 * (p^._2 + p^._1 - p^._3 - p^._0)
-  in
-  0.25 * cross bisectx bisecty
 
-
+-- | Calculate normal vectors at element nodes, as an interpolation of element
+-- face normals.
+--
+--  1. The normal at each node of the element is initially zero
+--
+--  2. Enumerate all six faces of the element. For each face, calculate a normal
+--     vector, scale the magnitude by one quarter, and sum the scaled vector
+--     into each of the four nodes of the element corresponding to a face.
+--
 calcElemNodeNormals
     :: Exp (Hexahedron Point)
     -> Exp (Hexahedron Normal)
 calcElemNodeNormals p =
   let
-      -- calculate the normal to each of the 6 faces of the hexahedron
+      -- Calcualte a face normal
+      --
+      surfaceElemFaceNormal :: Exp (Quad Point) -> Exp Normal
+      surfaceElemFaceNormal p =
+        let
+            bisectx   = 0.5 * (p^._3 + p^._2 - p^._1 - p^._0)
+            bisecty   = 0.5 * (p^._2 + p^._1 - p^._3 - p^._0)
+        in
+        0.25 * cross bisectx bisecty
+
+      -- The normals at each of the six faces of the hexahedron.
+      --
+      -- The direction that we trace out the coordinates forming a face is such
+      -- that it points towards the inside the hexahedron (RH-rule)
+      --
       n0123     = surfaceElemFaceNormal (lift (p^._0, p^._1, p^._2, p^._3))
       n0451     = surfaceElemFaceNormal (lift (p^._0, p^._4, p^._5, p^._1))
       n1562     = surfaceElemFaceNormal (lift (p^._1, p^._5, p^._6, p^._2))
@@ -187,8 +206,8 @@ calcElemNodeNormals p =
       n3740     = surfaceElemFaceNormal (lift (p^._3, p^._7, p^._4, p^._0))
       n4765     = surfaceElemFaceNormal (lift (p^._4, p^._7, p^._6, p^._5))
 
-      -- The normal at each node is the sum of the normals of the three faces
-      -- that meet at that node
+      -- The normal at each node is then the sum of the normals of the three
+      -- faces that meet at that node.
   in
   lift ( n0123 + n0451 + n3740
        , n0123 + n0451 + n1562
@@ -201,18 +220,70 @@ calcElemNodeNormals p =
        )
 
 
+-- | Sum force contribution in element to local vector for each node around
+-- element.
+--
 sumElemStressesToNodeForces
     :: Exp (Hexahedron Normal)
     -> Exp Sigma
     -> Exp (Hexahedron Force)
 sumElemStressesToNodeForces pf sigma =
-  lift ( - sigma * pf^._0
-       , - sigma * pf^._1
-       , - sigma * pf^._2
-       , - sigma * pf^._3
-       , - sigma * pf^._4
-       , - sigma * pf^._5
-       , - sigma * pf^._6
-       , - sigma * pf^._7
+  over each (\x -> -sigma * x) pf
+
+
+-- | Calculate the volume derivatives for an element. Starting with a formula
+-- for the volume of a hexahedron, take the derivative of that volume formula
+-- with respect to the coordinates at one of the nodes. By symmetry, the formula
+-- for one node can be applied to each of the other seven nodes
+--
+calcElemVolumeDerivative
+    :: Exp (Hexahedron Point)
+    -> Exp (Hexahedron (V3 R))
+calcElemVolumeDerivative p =
+  let
+      volumeDerivative :: Exp (V3 R, V3 R, V3 R, V3 R, V3 R, V3 R) -> Exp (V3 R)
+      volumeDerivative p =
+        let p01 = p^._0 + p^._1
+            p12 = p^._1 + p^._2
+            p04 = p^._0 + p^._4
+            p34 = p^._3 + p^._4
+            p25 = p^._2 + p^._5
+            p35 = p^._3 + p^._5
+        in
+        (1/12) * cross p12 p01 + cross p04 p34 + cross p35 p25
+  in
+  lift ( volumeDerivative (lift (p^._1, p^._2, p^._3, p^._4, p^._5, p^._7))
+       , volumeDerivative (lift (p^._0, p^._1, p^._2, p^._7, p^._4, p^._6))
+       , volumeDerivative (lift (p^._3, p^._0, p^._1, p^._6, p^._7, p^._5))
+       , volumeDerivative (lift (p^._2, p^._3, p^._0, p^._5, p^._6, p^._4))
+       , volumeDerivative (lift (p^._7, p^._6, p^._5, p^._0, p^._3, p^._1))
+       , volumeDerivative (lift (p^._4, p^._7, p^._6, p^._1, p^._0, p^._2))
+       , volumeDerivative (lift (p^._5, p^._4, p^._7, p^._2, p^._1, p^._3))
+       , volumeDerivative (lift (p^._6, p^._5, p^._4, p^._3, p^._2, p^._0))
        )
+
+
+-- Calculate the hourglass control contribution for each element. For each
+-- element:
+--
+--  1. Gather the node coordinates for that element.
+--
+--  2. Calculate the element volume derivative.
+--
+--  3. Perform a diagnosis check for any element volumes <= zero
+--
+--  4. Compute the Flanagan-Belytschko hourglass control force for each element.
+--  This is described in the paper:
+--
+--     "A uniform strain hexahedron and quadrilateral with orthogonal hourglass
+--     control", Flanagan, D. P. and Belytschko, T. International Journal for
+--     Numerical Methods in Engineering (17) 5, May 1981.
+--
+calcHourglassControlForElems
+    :: ()
+calcHourglassControlForElems = ()
+
+calcFBHourglassForceForElems
+    :: ()
+calcFBHourglassForceForElems = ()
 
