@@ -8,8 +8,6 @@ Hydrodynamics (LULESH) mini-app using [Accelerate][accelerate].
 but is a highly simplified application, hard-coded to solve the Sedov blast
 problem on an unstructured hexahedron mesh.
 
-![Sedov](images/sedov-3d-LLNL.png)
-
 ![What LULESH models](images/ale3d.gif)
 
   [accelerate]:         https://github.com/AccelerateHS/accelerate
