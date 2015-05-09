@@ -8,9 +8,9 @@ Hydrodynamics (LULESH) mini-app using [Accelerate][accelerate].
 but is a highly simplified application, hard-coded to solve the Sedov blast
 problem on an unstructured hexahedron mesh.
 
-![Sedov](https://codesign.llnl.gov/images/sedov-3d-LLNL.png)
+![Sedov](images/sedov-3d-LLNL.png)
 
-![What LULESH models](https://codesign.llnl.gov/images/ale3d.gif)
+![What LULESH models](images/ale3d.gif)
 
   [accelerate]:         https://github.com/AccelerateHS/accelerate
   [ale3d]:              https://wci.llnl.gov/simulation/computer-codes/ale3d
