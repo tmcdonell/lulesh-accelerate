@@ -193,7 +193,7 @@ initDomain Options{..} =
   }
 
 
--- Deposit some energy at the origin. The simulation is symmetric and we only
+-- Deposit some energy at the origin. The simulation is symmetric so we only
 -- simulate one quadrant, being sure to maintain the boundary conditions.
 --
 initEnergy :: (Elt a, Fractional a) => Int -> Array DIM3 a

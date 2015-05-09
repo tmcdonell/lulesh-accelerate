@@ -10,6 +10,35 @@ import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.Linear                     as L
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
 
+import Options
+import Domain
+import Data.Array.Accelerate.Interpreter
+
+
+-- -----------------------------------------------------------------------------
+-- TESTING
+-- -----------------------------------------------------------------------------
+
+domain :: Domain
+domain = initDomain defaultOpts
+
+elemNodes :: Acc (Field (Hexahedron Point))
+elemNodes =
+  let m                 = A.use (mesh domain)
+      Z :. z :. y :. x  = unlift (shape m)
+      sh                = index3 (z-1) (y-1) (x-1)
+  in
+  A.generate sh (collectDomainNodesToElemNodes m)
+
+stress :: Acc (Field Sigma)
+stress =
+  initStressTermsForElems (A.use $ pressure domain)
+                          (A.use $ viscosity domain)
+
+-- -----------------------------------------------------------------------------
+-- END TESTING BLOCK
+-- -----------------------------------------------------------------------------
+
 
 -- | Get the indices of the nodes surrounding the element at a given index. This
 -- follows the numbering convention:
@@ -123,7 +152,7 @@ integrateStressForElems p sigma =
 integrateStressForNode
     :: Acc (Field Pressure)
     -> Acc (Field Viscosity)
-    -> 
+    ->
 --}
 
 
@@ -135,7 +164,7 @@ calcElemShapeFunctionDerivatives
     -> Exp (Hexahedron Normal, Volume)          -- (shape function derivatives, jacobian determinant (volume))
 calcElemShapeFunctionDerivatives p =
   let
-      -- distance between diametrically opposed corners of the hexahedron
+      -- (distance between diametrically opposed corners of the hexahedron??)
       d60       = p^._6 - p^._0
       d53       = p^._5 - p^._3
       d71       = p^._7 - p^._1
@@ -143,28 +172,28 @@ calcElemShapeFunctionDerivatives p =
 
       -- what is this??
       -- 0.125 = 1/6
-      fjxi      = 0.125 * ( d60 + d53 - d71 - d42 )
-      fjet      = 0.125 * ( d60 - d53 + d71 - d42 )
-      fjze      = 0.125 * ( d60 + d53 + d71 + d42 )
+      fj_xi     = 0.125 * ( d60 + d53 - d71 - d42 )
+      fj_eta    = 0.125 * ( d60 - d53 + d71 - d42 )
+      fj_zeta   = 0.125 * ( d60 + d53 + d71 + d42 )
 
       -- calculate cofactors (= determinant??)
-      cjxi      =         cross fjet fjze
-      cjet      = negate (cross fjxi fjze)
-      cjze      =         cross fjxi fjet
+      cj_xi     =         cross fj_eta fj_zeta
+      cj_eta    = negate (cross fj_xi  fj_zeta)
+      cj_zeta   =         cross fj_xi  fj_eta
 
       -- calculate partials
       -- By symmetry, [6,7,4,5] = - [0,1,2,3]
-      b0        = - cjxi - cjet - cjze
-      b1        =   cjxi - cjet - cjze
-      b2        =   cjxi + cjet - cjze
-      b3        = - cjxi + cjet - cjze
+      b0        = - cj_xi - cj_eta - cj_zeta
+      b1        =   cj_xi - cj_eta - cj_zeta
+      b2        =   cj_xi + cj_eta - cj_zeta
+      b3        = - cj_xi + cj_eta - cj_zeta
       b4        = -b2
       b5        = -b3
       b6        = -b0
       b7        = -b1
 
       -- calculate jacobian determinant (volume)
-      volume    = 0.8 * dot fjet cjet
+      volume    = 0.8 * dot fj_eta cj_eta
   in
   lift ((b0, b1, b2, b3, b4, b5, b6, b7), volume)
 
@@ -184,7 +213,7 @@ calcElemNodeNormals
     -> Exp (Hexahedron Normal)
 calcElemNodeNormals p =
   let
-      -- Calcualte a face normal
+      -- Calculate a face normal
       --
       surfaceElemFaceNormal :: Exp (Quad Point) -> Exp Normal
       surfaceElemFaceNormal p =
@@ -275,15 +304,177 @@ calcElemVolumeDerivative p =
 --  4. Compute the Flanagan-Belytschko hourglass control force for each element.
 --  This is described in the paper:
 --
---     "A uniform strain hexahedron and quadrilateral with orthogonal hourglass
---     control", Flanagan, D. P. and Belytschko, T. International Journal for
---     Numerical Methods in Engineering (17) 5, May 1981.
+--    [1] "A uniform strain hexahedron and quadrilateral with orthogonal
+--        hourglass control", Flanagan, D. P. and Belytschko, T. International
+--        Journal for Numerical Methods in Engineering, (17) 5, May 1981.
 --
 calcHourglassControlForElems
     :: ()
 calcHourglassControlForElems = ()
 
+
 calcFBHourglassForceForElems
-    :: ()
-calcFBHourglassForceForElems = ()
+    :: Exp (Hexahedron Point)   -- from collectDomainNodesToElemNodes
+    -> Exp (Hexahedron Velocity)
+    -> Exp Volume               -- from calcElemShapeFunctionDerivatives
+    -> Exp (Hexahedron (V3 R))  -- from calcElemVolumeDerivative
+    -> Exp (Hexahedron Force)
+calcFBHourglassForceForElems pos vel vol dvol =
+  let
+      -- Hourglass base vectors, from [1] table 1. This defines the hourglass
+      -- patterns for a unit cube.
+      --
+      gamma :: Exp (Hexahedron (V4 R))
+      gamma = constant
+        ( V4 ( 1) ( 1) ( 1) (-1)
+        , V4 ( 1) (-1) (-1) ( 1)
+        , V4 (-1) (-1) ( 1) (-1)
+        , V4 (-1) ( 1) (-1) ( 1)
+        , V4 (-1) (-1) ( 1) ( 1)
+        , V4 (-1) ( 1) (-1) (-1)
+        , V4 ( 1) ( 1) ( 1) ( 1)
+        , V4 ( 1) (-1) (-1) (-1)
+        )
+
+      -- Compute hourglass modes
+      --
+      hourgam :: Exp (Hexahedron (V4 R))
+      hourgam =
+        let hg :: Exp (V4 R) -> Exp (Point) -> Exp (V3 R) -> Exp (V4 R)
+            hg g p dv   = (1 - volinv * dot dv p) *^ g
+
+            volinv      = 1 / vol
+        in
+        lift ( hg (gamma^._0) (pos^._0) (dvol^._0)
+             , hg (gamma^._1) (pos^._1) (dvol^._1)
+             , hg (gamma^._2) (pos^._2) (dvol^._2)
+             , hg (gamma^._3) (pos^._3) (dvol^._3)
+             , hg (gamma^._4) (pos^._4) (dvol^._4)
+             , hg (gamma^._5) (pos^._5) (dvol^._5)
+             , hg (gamma^._6) (pos^._6) (dvol^._6)
+             , hg (gamma^._7) (pos^._7) (dvol^._7)
+             )
+
+      -- Compute forces
+      coefficient = undefined -- hourg * 0.01 * ss1 * mass1 / volume13
+
+      f           = undefined -- calcElemFBHourglassForce vel hourgam coefficient
+
+{--
+      hourmodx =
+            x8n[i3]   * gamma[i1][0] +
+            x8n[i3+1] * gamma[i1][1] +
+            x8n[i3+2] * gamma[i1][2] +
+            x8n[i3+3] * gamma[i1][3] +
+            x8n[i3+4] * gamma[i1][4] +
+            x8n[i3+5] * gamma[i1][5] +
+            x8n[i3+6] * gamma[i1][6] +
+            x8n[i3+7] * gamma[i1][7];
+
+      hourmody =
+            y8n[i3]   * gamma[i1][0] +
+            y8n[i3+1] * gamma[i1][1] +
+            y8n[i3+2] * gamma[i1][2] +
+            y8n[i3+3] * gamma[i1][3] +
+            y8n[i3+4] * gamma[i1][4] +
+            y8n[i3+5] * gamma[i1][5] +
+            y8n[i3+6] * gamma[i1][6] +
+            y8n[i3+7] * gamma[i1][7];
+
+      hourmodz =
+            z8n[i3]   * gamma[i1][0] +
+            z8n[i3+1] * gamma[i1][1] +
+            z8n[i3+2] * gamma[i1][2] +
+            z8n[i3+3] * gamma[i1][3] +
+            z8n[i3+4] * gamma[i1][4] +
+            z8n[i3+5] * gamma[i1][5] +
+            z8n[i3+6] * gamma[i1][6] +
+            z8n[i3+7] * gamma[i1][7];
+
+      hourgam0[i1] = gamma[i1][0] -  volinv * ( dvdx[i3  ] * hourmodx + dvdy[i3  ] * hourmody + dvdz[i3  ] * hourmodz );
+      hourgam1[i1] = gamma[i1][1] -  volinv * ( dvdx[i3+1] * hourmodx + dvdy[i3+1] * hourmody + dvdz[i3+1] * hourmodz );
+      hourgam2[i1] = gamma[i1][2] -  volinv * ( dvdx[i3+2] * hourmodx + dvdy[i3+2] * hourmody + dvdz[i3+2] * hourmodz );
+      hourgam3[i1] = gamma[i1][3] -  volinv * ( dvdx[i3+3] * hourmodx + dvdy[i3+3] * hourmody + dvdz[i3+3] * hourmodz );
+      hourgam4[i1] = gamma[i1][4] -  volinv * ( dvdx[i3+4] * hourmodx + dvdy[i3+4] * hourmody + dvdz[i3+4] * hourmodz );
+      hourgam5[i1] = gamma[i1][5] -  volinv * ( dvdx[i3+5] * hourmodx + dvdy[i3+5] * hourmody + dvdz[i3+5] * hourmodz );
+      hourgam6[i1] = gamma[i1][6] -  volinv * ( dvdx[i3+6] * hourmodx + dvdy[i3+6] * hourmody + dvdz[i3+6] * hourmodz );
+      hourgam7[i1] = gamma[i1][7] -  volinv * ( dvdx[i3+7] * hourmodx + dvdy[i3+7] * hourmody + dvdz[i3+7] * hourmodz );
+--}
+  in
+  f
+
+
+calcElemFBHourglassForce
+    :: Exp R
+    -> Exp (Hexahedron Velocity)
+    -> Exp (Hexahedron (V4 R))
+    -> Exp (Hexahedron Force)
+calcElemFBHourglassForce coefficient vel hourgam =
+  let
+      h00, h01, h02, h03 :: Exp (V3 R)
+      h00 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._x)) (vel ^.. each)
+      h01 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._y)) (vel ^.. each)
+      h02 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._z)) (vel ^.. each)
+      h03 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._w)) (vel ^.. each)
+
+      hh :: Exp (V4 (V3 R))
+      hh  = lift (V4 h00 h01 h02 h03)
+
+      hg :: Exp (V4 R) -> Exp Force
+      hg h = coefficient *^ (P.sum $ P.zipWith (*^) (h^..each) (hh^..each))
+  in
+  over each hg hourgam
+
+{--
+
+   h00 = hourgam0[i00] * xd[0] + hourgam1[i00] * xd[1] + hourgam2[i00] * xd[2] + hourgam3[i00] * xd[3] + hourgam4[i00] * xd[4] + hourgam5[i00] * xd[5] + hourgam6[i00] * xd[6] + hourgam7[i00] * xd[7];
+   h00 = hourgam0[i00] * yd[0] + hourgam1[i00] * yd[1] + hourgam2[i00] * yd[2] + hourgam3[i00] * yd[3] + hourgam4[i00] * yd[4] + hourgam5[i00] * yd[5] + hourgam6[i00] * yd[6] + hourgam7[i00] * yd[7];
+   h00 = hourgam0[i00] * zd[0] + hourgam1[i00] * zd[1] + hourgam2[i00] * zd[2] + hourgam3[i00] * zd[3] + hourgam4[i00] * zd[4] + hourgam5[i00] * zd[5] + hourgam6[i00] * zd[6] + hourgam7[i00] * zd[7];
+
+   h01 = hourgam0[i01] * xd[0] + hourgam1[i01] * xd[1] + hourgam2[i01] * xd[2] + hourgam3[i01] * xd[3] + hourgam4[i01] * xd[4] + hourgam5[i01] * xd[5] + hourgam6[i01] * xd[6] + hourgam7[i01] * xd[7];
+   h01 = hourgam0[i01] * yd[0] + hourgam1[i01] * yd[1] + hourgam2[i01] * yd[2] + hourgam3[i01] * yd[3] + hourgam4[i01] * yd[4] + hourgam5[i01] * yd[5] + hourgam6[i01] * yd[6] + hourgam7[i01] * yd[7];
+   h01 = hourgam0[i01] * zd[0] + hourgam1[i01] * zd[1] + hourgam2[i01] * zd[2] + hourgam3[i01] * zd[3] + hourgam4[i01] * zd[4] + hourgam5[i01] * zd[5] + hourgam6[i01] * zd[6] + hourgam7[i01] * zd[7];
+
+   h02 = hourgam0[i02] * xd[0] + hourgam1[i02] * xd[1] + hourgam2[i02] * xd[2] + hourgam3[i02] * xd[3] + hourgam4[i02] * xd[4] + hourgam5[i02] * xd[5] + hourgam6[i02] * xd[6] + hourgam7[i02] * xd[7];
+   h02 = hourgam0[i02] * yd[0] + hourgam1[i02] * yd[1] + hourgam2[i02] * yd[2] + hourgam3[i02] * yd[3] + hourgam4[i02] * yd[4] + hourgam5[i02] * yd[5] + hourgam6[i02] * yd[6] + hourgam7[i02] * yd[7];
+   h02 = hourgam0[i02] * zd[0] + hourgam1[i02] * zd[1] + hourgam2[i02] * zd[2] + hourgam3[i02] * zd[3] + hourgam4[i02] * zd[4] + hourgam5[i02] * zd[5] + hourgam6[i02] * zd[6] + hourgam7[i02] * zd[7];
+
+   h03 = hourgam0[i03] * xd[0] + hourgam1[i03] * xd[1] + hourgam2[i03] * xd[2] + hourgam3[i03] * xd[3] + hourgam4[i03] * xd[4] + hourgam5[i03] * xd[5] + hourgam6[i03] * xd[6] + hourgam7[i03] * xd[7];
+   h03 = hourgam0[i03] * yd[0] + hourgam1[i03] * yd[1] + hourgam2[i03] * yd[2] + hourgam3[i03] * yd[3] + hourgam4[i03] * yd[4] + hourgam5[i03] * yd[5] + hourgam6[i03] * yd[6] + hourgam7[i03] * yd[7];
+   h03 = hourgam0[i03] * zd[0] + hourgam1[i03] * zd[1] + hourgam2[i03] * zd[2] + hourgam3[i03] * zd[3] + hourgam4[i03] * zd[4] + hourgam5[i03] * zd[5] + hourgam6[i03] * zd[6] + hourgam7[i03] * zd[7];
+
+   hgfx[0] = coefficient * (hourgam0[i00] * h00 + hourgam0[i01] * h01 + hourgam0[i02] * h02 + hourgam0[i03] * h03);
+   hgfy[0] = coefficient * (hourgam0[i00] * h00 + hourgam0[i01] * h01 + hourgam0[i02] * h02 + hourgam0[i03] * h03);
+   hgfz[0] = coefficient * (hourgam0[i00] * h00 + hourgam0[i01] * h01 + hourgam0[i02] * h02 + hourgam0[i03] * h03);
+
+
+
+
+   hgfx[0] = coefficient * (hourgam0[i00] * h00 + hourgam0[i01] * h01 + hourgam0[i02] * h02 + hourgam0[i03] * h03);
+   hgfx[1] = coefficient * (hourgam1[i00] * h00 + hourgam1[i01] * h01 + hourgam1[i02] * h02 + hourgam1[i03] * h03);
+   hgfx[2] = coefficient * (hourgam2[i00] * h00 + hourgam2[i01] * h01 + hourgam2[i02] * h02 + hourgam2[i03] * h03);
+   hgfx[3] = coefficient * (hourgam3[i00] * h00 + hourgam3[i01] * h01 + hourgam3[i02] * h02 + hourgam3[i03] * h03);
+   hgfx[4] = coefficient * (hourgam4[i00] * h00 + hourgam4[i01] * h01 + hourgam4[i02] * h02 + hourgam4[i03] * h03);
+   hgfx[5] = coefficient * (hourgam5[i00] * h00 + hourgam5[i01] * h01 + hourgam5[i02] * h02 + hourgam5[i03] * h03);
+   hgfx[6] = coefficient * (hourgam6[i00] * h00 + hourgam6[i01] * h01 + hourgam6[i02] * h02 + hourgam6[i03] * h03);
+   hgfx[7] = coefficient * (hourgam7[i00] * h00 + hourgam7[i01] * h01 + hourgam7[i02] * h02 + hourgam7[i03] * h03);
+
+   hgfy[0] = coefficient * (hourgam0[i00] * h00 + hourgam0[i01] * h01 + hourgam0[i02] * h02 + hourgam0[i03] * h03);
+   hgfy[1] = coefficient * (hourgam1[i00] * h00 + hourgam1[i01] * h01 + hourgam1[i02] * h02 + hourgam1[i03] * h03);
+   hgfy[2] = coefficient * (hourgam2[i00] * h00 + hourgam2[i01] * h01 + hourgam2[i02] * h02 + hourgam2[i03] * h03);
+   hgfy[3] = coefficient * (hourgam3[i00] * h00 + hourgam3[i01] * h01 + hourgam3[i02] * h02 + hourgam3[i03] * h03);
+   hgfy[4] = coefficient * (hourgam4[i00] * h00 + hourgam4[i01] * h01 + hourgam4[i02] * h02 + hourgam4[i03] * h03);
+   hgfy[5] = coefficient * (hourgam5[i00] * h00 + hourgam5[i01] * h01 + hourgam5[i02] * h02 + hourgam5[i03] * h03);
+   hgfy[6] = coefficient * (hourgam6[i00] * h00 + hourgam6[i01] * h01 + hourgam6[i02] * h02 + hourgam6[i03] * h03);
+   hgfy[7] = coefficient * (hourgam7[i00] * h00 + hourgam7[i01] * h01 + hourgam7[i02] * h02 + hourgam7[i03] * h03);
+
+   hgfz[0] = coefficient * (hourgam0[i00] * h00 + hourgam0[i01] * h01 + hourgam0[i02] * h02 + hourgam0[i03] * h03);
+   hgfz[1] = coefficient * (hourgam1[i00] * h00 + hourgam1[i01] * h01 + hourgam1[i02] * h02 + hourgam1[i03] * h03);
+   hgfz[2] = coefficient * (hourgam2[i00] * h00 + hourgam2[i01] * h01 + hourgam2[i02] * h02 + hourgam2[i03] * h03);
+   hgfz[3] = coefficient * (hourgam3[i00] * h00 + hourgam3[i01] * h01 + hourgam3[i02] * h02 + hourgam3[i03] * h03);
+   hgfz[4] = coefficient * (hourgam4[i00] * h00 + hourgam4[i01] * h01 + hourgam4[i02] * h02 + hourgam4[i03] * h03);
+   hgfz[5] = coefficient * (hourgam5[i00] * h00 + hourgam5[i01] * h01 + hourgam5[i02] * h02 + hourgam5[i03] * h03);
+   hgfz[6] = coefficient * (hourgam6[i00] * h00 + hourgam6[i01] * h01 + hourgam6[i02] * h02 + hourgam6[i03] * h03);
+   hgfz[7] = coefficient * (hourgam7[i00] * h00 + hourgam7[i01] * h01 + hourgam7[i02] * h02 + hourgam7[i03] * h03);
+--}
 
