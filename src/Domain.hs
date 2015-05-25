@@ -74,7 +74,7 @@ data Domain = Domain
     -- TLM: viscosity = qq^2 + ql + q ??
 
   , volume              :: Field Volume         -- v (relative)
-  , volume_ref          :: Array DIM3 R         -- volo (reference volume)
+  , volume_ref          :: Field Volume         -- volo (reference volume)
   , volume_dov          :: Array DIM3 R         -- volume derivative over volume
 
   , arealg              :: Array DIM3 R         -- characteristic length of an element

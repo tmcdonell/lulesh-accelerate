@@ -1,12 +1,14 @@
-{-# LANGUAGE RebindableSyntax #-}
-{-# LANGUAGE RecordWildCards  #-}
-{-# LANGUAGE ViewPatterns     #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE RebindableSyntax    #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 module LULESH where
 
 import Type
 
-import Prelude                                          as P
+import Prelude                                          as P hiding ( (<*) )
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.Linear                     as L
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
@@ -31,29 +33,36 @@ elemNodes =
   in
   A.generate sh (collectDomainNodesToElemNodes m)
 
-stress :: Acc (Field Sigma)
-stress =
-  initStressTermsForElems (A.use $ pressure domain)
-                          (A.use $ viscosity domain)
+-- stress :: Acc (Field Sigma)
+-- stress =
+--   initStressTermsForElems (A.use $ pressure domain)
+--                           (A.use $ viscosity domain)
 
 -- -----------------------------------------------------------------------------
 -- END TESTING BLOCK
 -- -----------------------------------------------------------------------------
 
+-- Utilities
+-- ---------
+
+
+-- Use rebindable syntax to improve readability of branches in scalar code.
+--
 ifThenElse :: Elt t => Exp Bool -> Exp t -> Exp t -> Exp t
 ifThenElse x y z
   = x ? (y, z)
 
 
--- | Get the indices of the nodes surrounding the element at a given index. This
+-- | Get the values at the nodes surrounding the element of a given index. This
 -- follows the numbering convention:
 --
 -- <<../images/nodes.png>>
 --
 collectDomainNodesToElemNodes
-    :: Acc (Field Point)
+    :: Elt a
+    => Acc (Field a)
     -> Exp Ix
-    -> Exp (Hexahedron Point)
+    -> Exp (Hexahedron a)
 collectDomainNodesToElemNodes mesh ix@(unlift -> Z :. z :. y :. x)
   = let n0 = mesh ! ix
         n1 = mesh ! index3 z     y     (x+1)
@@ -65,6 +74,50 @@ collectDomainNodesToElemNodes mesh ix@(unlift -> Z :. z :. y :. x)
         n7 = mesh ! index3 (z+1) (y+1) x
     in
     lift (n0, n1, n2, n3, n4, n5, n6, n7)
+
+
+-- Given a set of values at the nodes surrounding each element, form a nodal
+-- grid by combining all those elements.
+--
+distributeElemNodesToDomainNodes
+    :: forall a. Elt a
+    => (Exp a -> Exp a -> Exp a)
+    -> Exp a
+    -> Acc (Field (Hexahedron a))
+    -> Acc (Field a)
+distributeElemNodesToDomainNodes f zero arr =
+  let
+      numElem           = unindex3 (shape arr) ^. _2
+      numNode           = numElem + 1
+      sh'               = index3 numNode numNode numNode
+
+      at :: Exp Int -> Exp Int -> Exp Int
+         -> Lens' (Exp (Hexahedron a)) (Exp a)
+         -> Exp a
+      at z y x node =
+        if 0 <=* z &&* z <* numElem &&* 0 <=* y &&* y <* numElem &&* 0 <=* x &&* x <* numElem
+           then (arr ! index3 z y x) ^. node
+           else zero
+
+      mesh :: Exp DIM3 -> Exp a
+      mesh (unlift -> Z :. z :. y :. x) =
+        at z     y     x     _0 `f`
+        at z     y     (x-1) _1 `f`
+        at z     (y-1) (x-1) _2 `f`
+        at z     (y-1) x     _3 `f`
+        at (z-1) y     x     _4 `f`
+        at (z-1) y     (x-1) _5 `f`
+        at (z-1) (y-1) (x-1) _6 `f`
+        at (z-1) (y-1) x     _7
+  in
+  generate sh' mesh
+
+
+lagrangeLeapFrog :: ()
+lagrangeLeapFrog = ()
+  -- lagrangeNodal
+  -- lagrangeElements
+  -- calcTimeConstraintsForElems
 
 
 -- | Calculate nodal forces, accelerations, velocities, and positions, with
@@ -84,6 +137,12 @@ lagrangeNodal = ()
   -- CalcPositionForNodes
 
 
+-- Calculate element quantities (i.e. velocity gradient and viscosity) and
+-- update material states.
+--
+lagrangeElements :: ()
+lagrangeElements = ()
+
 
 -- | Calculate the three-dimensional force vector F at each mesh node based on
 -- the values of mesh variables at time t_n.
@@ -91,8 +150,20 @@ lagrangeNodal = ()
 -- A volume force contribution is calculated within each mesh element. This is
 -- then distributed to the surrounding nodes.
 --
-calcForceForNodes :: ()
-calcForceForNodes = ()
+calcForceForNodes
+    :: Exp R
+    -> Acc (Field Point)
+    -> Acc (Field Velocity)
+    -> Acc (Field Pressure)
+    -> Acc (Field Viscosity)
+    -> Acc (Field Volume)
+    -> Acc (Field Volume)
+    -> Acc (Field R)
+    -> Acc (Field R)
+    -> Acc (Field Force)
+calcForceForNodes hgcoef points velocity pressure viscosity volume volumeRef soundSpeed elemMass
+  = distributeElemNodesToDomainNodes (+) 0
+  $ calcVolumeForceForElems hgcoef points velocity pressure viscosity volume volumeRef soundSpeed elemMass
 
 
 -- | Calculate the volume force contribute for each hexahedral mesh element. The
@@ -104,17 +175,59 @@ calcForceForNodes = ()
 --
 --  3. Calculate the hourglass control contribution for each element.
 --
-calcVolumeForceForElems :: ()
-calcVolumeForceForElems =
+calcVolumeForceForElems
+    :: Exp R
+    -> Acc (Field Point)
+    -> Acc (Field Velocity)
+    -> Acc (Field Pressure)
+    -> Acc (Field Viscosity)
+    -> Acc (Field Volume)
+    -> Acc (Field Volume)
+    -> Acc (Field R)
+    -> Acc (Field R)
+    -> Acc (Field (Hexahedron Force))
+calcVolumeForceForElems hgcoef points velocity pressure viscosity volume volumeRef soundSpeed elemMass =
   let
-      -- Sum contributions to total stress tensor
-      -- sigma     = initStressTermsForElems undefined undefined
+      numNode           = unindex3 (shape points) ^. _2
+      numElem           = numNode - 1
+      sh                = index3 numElem numElem numElem
 
-      -- call elemlib stress integration loop to produce nodal forces from
-      -- material stresses
-      -- _         = integrateStressForElems sigma
+      -- sum contributions to total stress tensor
+      sigma             = A.zipWith initStressTermsForElems pressure viscosity
+
+      -- calculate nodal forces from element stresses
+      (stress, _determ) = A.unzip
+                        $ A.zipWith integrateStressForElems
+                                    (generate sh (collectDomainNodesToElemNodes points))
+                                    sigma
+
+      -- TODO: check for negative element volume
+      -- A.any (<=* 0) determ --> error
+
+      -- Calculate the hourglass control contribution for each element
+      hourglass         = generate sh $ \ix ->
+        let pos         = collectDomainNodesToElemNodes points ix
+            vel         = collectDomainNodesToElemNodes velocity ix
+
+            v           = volume     ! ix
+            volo        = volumeRef  ! ix
+            ss          = soundSpeed ! ix
+            mass        = elemMass   ! ix
+        in
+        calcHourglassControlForElems pos vel volo v ss mass hgcoef
+
+      -- Add the nodal forces
+      combine :: Exp (Hexahedron Force) -> Exp (Hexahedron Force) -> Exp (Hexahedron Force)
+      combine x y       = lift ( x^._0 + y^._0
+                               , x^._1 + y^._1
+                               , x^._2 + y^._2
+                               , x^._3 + y^._3
+                               , x^._4 + y^._4
+                               , x^._5 + y^._5
+                               , x^._6 + y^._6
+                               , x^._7 + y^._7 )
   in
-  ()
+  A.zipWith combine stress hourglass
 
 
 -- | Initialize stress terms for each element. Our assumption of an inviscid
@@ -123,42 +236,35 @@ calcVolumeForceForElems =
 -- terms of the stress tensor sigma to −(p + q) in each element.
 --
 initStressTermsForElems
-    :: Acc (Field Pressure)
-    -> Acc (Field Viscosity)
-    -> Acc (Field Sigma)
-initStressTermsForElems =
-  A.zipWith (\p (view _z -> q) -> let s = -p - q in lift (V3 s s s))
+    :: Exp Pressure
+    -> Exp Viscosity
+    -> Exp Sigma
+initStressTermsForElems p (view _z -> q) =
+  let s = -p - q
+  in  lift (V3 s s s)
 
 
 -- | Integrate the volumetric stress contributions for each element.
 --
+-- In the reference LULESH code, the forces at each of the corners of the
+-- hexahedron defining this element would be distributed to the nodal mesh. This
+-- corresponds to a global scatter operation.
+--
+-- Instead, we just return all the values directly, and the individual
+-- contributions to the nodes will be combined in a different step.
+--
 integrateStressForElems
     :: Exp (Hexahedron Point)
     -> Exp Sigma
-    -> Exp (Hexahedron Force)
+    -> Exp (Hexahedron Force, Volume)
 integrateStressForElems p sigma =
   let
       -- Volume calculation involves extra work for numerical consistency
       det    = calcElemShapeFunctionDerivatives p ^._1
       b      = calcElemNodeNormals p
       f      = sumElemStressesToNodeForces b sigma
-
-      -- At this point, the forces at each of the corners of the hexahedron
-      -- defining this element would be distributed to the nodal mesh. This
-      -- corresponds to a global scatter operation.
-      --
-      -- Instead, we define the problem over the nodal mesh. At each node, visit
-      -- the (up to) eight surrounding elements, and calculate the contribution
-      -- from that element at this node.
   in
-  f
-
-{--
-integrateStressForNode
-    :: Acc (Field Pressure)
-    -> Acc (Field Viscosity)
-    ->
---}
+  lift (f, det)
 
 
 -- Calculate the shape function derivative for the element. This is used to
@@ -166,7 +272,7 @@ integrateStressForNode
 --
 calcElemShapeFunctionDerivatives
     :: Exp (Hexahedron Point)                   -- node coordinates bounding this hexahedron
-    -> Exp (Hexahedron Normal, Volume)          -- (shape function derivatives, jacobian determinant (volume))
+    -> Exp (Hexahedron Force, Volume)           -- (shape function derivatives, jacobian determinant (volume))
 calcElemShapeFunctionDerivatives p =
   let
       -- (distance between diametrically opposed corners of the hexahedron??)
@@ -314,40 +420,34 @@ calcElemVolumeDerivative p =
 --        hourglass control", Flanagan, D. P. and Belytschko, T. International
 --        Journal for Numerical Methods in Engineering, (17) 5, May 1981.
 --
--- In the LULESH reference code, this function simply gathers the appropriate
--- values from the nodes surrounding the element into temporary arrays and calls
--- 'calcFBHourglassForceForElems'.
---
--- Since we already have the surrounding nodal data in the form of the
--- Hexahedron structure, this is basically a NOP.
---
--- TODO: It is an error if the volume is negative
---
 calcHourglassControlForElems
-    :: Exp (Hexahedron Point)           -- from collectDomainNodesToElemNodes
+    :: Exp (Hexahedron Point)
     -> Exp (Hexahedron Velocity)
-    -> Exp Volume                       -- from calcElemShapeFunctionDerivatives a.k.a. determ
-    -> Exp (Hexahedron (V3 R))          -- from calcElemVolumeDerivative
+    -> Exp Volume                       -- relative volume
+    -> Exp Volume                       -- reference volume
     -> Exp R                            -- speed of sound
     -> Exp R                            -- mass
     -> Exp R
     -> Exp (Hexahedron Force)
-calcHourglassControlForElems pos vel vol dvol ss mass hourg =
+calcHourglassControlForElems pos vel volo v ss mass hourg =
+  let dvol      = calcElemVolumeDerivative pos
+      determ    = volo * v
+  in
   if hourg >* 0
-     then calcFBHourglassForceForElems pos vel vol dvol ss mass hourg
+     then calcFBHourglassForceForElems pos vel determ dvol ss mass hourg
      else constant (0,0,0,0,0,0,0,0)
 
 
 calcFBHourglassForceForElems
-    :: Exp (Hexahedron Point)           -- from collectDomainNodesToElemNodes
+    :: Exp (Hexahedron Point)
     -> Exp (Hexahedron Velocity)
-    -> Exp Volume                       -- from calcElemShapeFunctionDerivatives a.k.a. determ
+    -> Exp Volume
     -> Exp (Hexahedron (V3 R))          -- from calcElemVolumeDerivative
     -> Exp R                            -- speed of sound
     -> Exp R                            -- mass
     -> Exp R
     -> Exp (Hexahedron Force)
-calcFBHourglassForceForElems pos vel vol dvol ss mass hourg =
+calcFBHourglassForceForElems pos vel determ dvol ss mass hourg =
   let
       -- Hourglass base vectors, from [1] table 1. This defines the hourglass
       -- patterns for a unit cube.
@@ -371,7 +471,7 @@ calcFBHourglassForceForElems pos vel vol dvol ss mass hourg =
         let hg :: Exp (V4 R) -> Exp (Point) -> Exp (V3 R) -> Exp (V4 R)
             hg g p dv   = (1 - volinv * dot dv p) *^ g
 
-            volinv      = 1 / vol
+            volinv      = 1 / determ
         in
         lift ( hg (gamma^._0) (pos^._0) (dvol^._0)
              , hg (gamma^._1) (pos^._1) (dvol^._1)
@@ -385,7 +485,7 @@ calcFBHourglassForceForElems pos vel vol dvol ss mass hourg =
 
       -- Compute forces
       cbrt x      = x ** (1/3)          -- cube root
-      coefficient = - hourg * 0.01 * ss * mass / cbrt vol
+      coefficient = - hourg * 0.01 * ss * mass / cbrt determ
   in
   calcElemFBHourglassForce coefficient vel hourgam
 
