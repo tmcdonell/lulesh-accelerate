@@ -181,11 +181,11 @@ lagrangeNodal
     -> Acc (Field Mass)         -- element mass
     -> Acc (Field Mass)         -- nodal mass
     -> ( Acc (Field Position), Acc (Field Velocity) )
-lagrangeNodal hgcoef ucut dt position velocity pressure viscosity volume volumeRef soundSpeed elemMass nodalMass =
+lagrangeNodal hgcoef ucut dt position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass nodalMass =
   let
       -- Time of boundary condition evaluation is beginning of step for force
       -- and acceleration boundary conditions
-      force             = calcForceForNodes hgcoef position velocity pressure viscosity volume volumeRef soundSpeed elemMass
+      force             = calcForceForNodes hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
       acceleration      = calcAccelerationForNodes force nodalMass
       velocity'         = calcVelocityForNodes dt ucut velocity acceleration
       position'         = calcPositionForNodes dt position velocity'
@@ -210,9 +210,9 @@ calcForceForNodes
     -> Acc (Field R)
     -> Acc (Field Mass)
     -> Acc (Field Force)
-calcForceForNodes hgcoef position velocity pressure viscosity volume volumeRef soundSpeed elemMass
+calcForceForNodes hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
   = distributeToNode (+) 0
-  $ calcVolumeForceForElems hgcoef position velocity pressure viscosity volume volumeRef soundSpeed elemMass
+  $ calcVolumeForceForElems hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
 
 
 -- | Calculate the volume force contribute for each hexahedral mesh element. The
@@ -233,7 +233,7 @@ calcVolumeForceForElems
     -> Acc (Field R)
     -> Acc (Field Mass)
     -> Acc (Field (Hexahedron Force))
-calcVolumeForceForElems hgcoef position velocity pressure viscosity volume volumeRef soundSpeed elemMass =
+calcVolumeForceForElems hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass =
   let
       numNode           = unindex3 (shape position) ^. _2
       numElem           = numNode - 1
@@ -256,7 +256,7 @@ calcVolumeForceForElems hgcoef position velocity pressure viscosity volume volum
         let pos         = collectToElem position ix
             vel         = collectToElem velocity ix
 
-            v           = volume     ! ix
+            v           = volumeRel  ! ix
             volo        = volumeRef  ! ix
             ss          = soundSpeed ! ix
             mass        = elemMass   ! ix
