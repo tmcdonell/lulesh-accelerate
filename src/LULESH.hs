@@ -319,22 +319,21 @@ calcElemShapeFunctionDerivatives
     -> Exp (Hexahedron Force, Volume)           -- (shape function derivatives, jacobian determinant (volume))
 calcElemShapeFunctionDerivatives p =
   let
-      -- (distance between diametrically opposed corners of the hexahedron??)
+      -- compute diagonal differences
       d60       = p^._6 - p^._0
       d53       = p^._5 - p^._3
       d71       = p^._7 - p^._1
       d42       = p^._4 - p^._2
 
-      -- what is this??
-      -- 0.125 = 1/6
+      -- compute jacobians
       fj_xi     = 0.125 * ( d60 + d53 - d71 - d42 )
       fj_eta    = 0.125 * ( d60 - d53 + d71 - d42 )
       fj_zeta   = 0.125 * ( d60 + d53 + d71 + d42 )
 
       -- calculate cofactors (= determinant??)
-      cj_xi     =         cross fj_eta fj_zeta
-      cj_eta    = negate (cross fj_xi  fj_zeta)
-      cj_zeta   =         cross fj_xi  fj_eta
+      cj_xi     = cross fj_eta  fj_zeta
+      cj_eta    = cross fj_zeta fj_xi
+      cj_zeta   = cross fj_xi   fj_eta
 
       -- calculate partials
       -- By symmetry, [6,7,4,5] = - [0,1,2,3]
