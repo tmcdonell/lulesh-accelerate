@@ -183,14 +183,6 @@ lagrangeNodal hgcoef ucut dt position velocity pressure viscosity volume volumeR
   (position', velocity')
 
 
--- Calculate element quantities (i.e. velocity gradient and viscosity) and
--- update material states.
---
-lagrangeElements :: ()
-lagrangeElements = ()
-
-
-
 -- | Calculate the three-dimensional force vector F at each mesh node based on
 -- the values of mesh variables at time t_n.
 --
@@ -634,5 +626,81 @@ integrate dt
   = A.zipWith (\x xd -> x + xd ^* dt)
 
 
+-- Advance Element Quantities
+-- --------------------------
 
+-- | Advance element quantities, primarily pressure, internal energy, and
+-- relative volume. The artificial viscosity in each element is also calculated
+-- here. The main steps are:
+--
+--   1. Calculate element quantities based on nodal kinematic quantities
+--   2. Calculate element artificial viscosity terms
+--   3. Apply material properties in each element needed to calculate updated
+--      pressure and internal energy.
+--   4. Compute updated element volume
+--
+lagrangeElements
+    :: Exp R                    -- timestep
+    -> Acc (Field Position)
+    -> Acc (Field Velocity)
+    -> Acc (Field Volume)
+    -> Acc (Field Mass)
+    -> ()
+lagrangeElements dt position velocity volume _ =
+  ()
+
+
+-- | Calculate various element quantities that are based on the new kinematic
+-- node quantities position and velocity.
+--
+calcLagrangeElements
+    :: Exp R                    -- timestep
+    -> Acc (Field Position)
+    -> Acc (Field Velocity)
+    -> Acc (Field Volume)       -- relative volume
+    -> Acc (Field Volume)       -- reference volume
+    -> ()
+calcLagrangeElements dt pos vel relVol refVol =
+  ()
+
+
+-- | Calculate terms in the total strain rate tensor epsilon_tot that are used
+-- to compute the terms in the deviatoric strain rate tensor epsilon.
+--
+calcKinematicsForElems
+    :: Exp R                    -- timestep
+    -> Acc (Field Position)
+    -> Acc (Field Velocity)
+    -> Acc (Field Volume)       -- relative volume
+    -> Acc (Field Volume)       -- reference volume
+    -> ()
+calcKinematicsForElems dt pos vel relVol refVol =
+  ()
+
+
+-- | Calculate the volume of an element given the nodal coordinates
+--
+calcElemVolume
+    :: Exp (Hexahedron Position)
+    -> Exp Volume
+calcElemVolume p =
+  let
+      -- compute diagonal differences
+      d61       = p^._6 - p^._1
+      d70       = p^._7 - p^._0
+      d63       = p^._6 - p^._3
+      d20       = p^._2 - p^._0
+      d50       = p^._5 - p^._0
+      d64       = p^._6 - p^._4
+      d31       = p^._3 - p^._1
+      d72       = p^._7 - p^._2
+      d43       = p^._4 - p^._3
+      d57       = p^._5 - p^._7
+      d14       = p^._1 - p^._4
+      d25       = p^._2 - p^._5
+  in
+  (1/12) * ( triple (d31 + d72) d63 d20
+           + triple (d43 + d57) d64 d70
+           + triple (d14 + d25) d61 d50
+           )
 
