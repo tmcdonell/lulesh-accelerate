@@ -714,3 +714,30 @@ calcElemVolume p =
            + triple (d14 + d25) d61 d50
            )
 
+
+-- | Calculate the characteristic length of the element. This is the volume of
+-- the element divided by the area of its largest face.
+--
+calcElemCharacteristicLength
+    :: Exp (Hexahedron Position)
+    -> Exp Volume
+    -> Exp R
+calcElemCharacteristicLength p v =
+  let
+      faceArea :: Exp (Quad Position) -> Exp R
+      faceArea face =
+        let
+            d20 = face^._2 - face^._0
+            d31 = face^._3 - face^._1
+            f   = d20 - d31
+            g   = d20 + d31
+            h   = dot f g
+        in
+        dot f f * dot g g - h * h
+
+      area = P.maximum
+           $ P.map faceArea
+           $ P.map (flip collectFace p) [0..5]
+  in
+  4.0 * v / sqrt area
+
