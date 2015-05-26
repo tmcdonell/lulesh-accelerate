@@ -31,7 +31,7 @@ elemNodes =
       Z :. z :. y :. x  = unlift (shape m)
       sh                = index3 (z-1) (y-1) (x-1)
   in
-  A.generate sh (collectDomainNodesToElemNodes m)
+  A.generate sh (collectToElem m)
 
 -- stress :: Acc (Field Sigma)
 -- stress =
@@ -72,13 +72,14 @@ ifThenElse x y z
 --
 -- <<../images/nodes.png>>
 --
-collectDomainNodesToElemNodes
+collectToElem
     :: Elt a
     => Acc (Field a)
     -> Exp Ix
     -> Exp (Hexahedron a)
-collectDomainNodesToElemNodes mesh ix@(unlift -> Z :. z :. y :. x)
-  = let n0 = mesh ! ix
+collectToElem mesh ix@(unlift -> Z :. z :. y :. x)
+  = let
+        n0 = mesh ! ix
         n1 = mesh ! index3 z     y     (x+1)
         n2 = mesh ! index3 z     (y+1) (x+1)
         n3 = mesh ! index3 z     (y+1) x
@@ -93,13 +94,13 @@ collectDomainNodesToElemNodes mesh ix@(unlift -> Z :. z :. y :. x)
 -- Given a set of values at the nodes surrounding each element, form a nodal
 -- grid by combining all those elements.
 --
-distributeElemNodesToDomainNodes
+distributeToNode
     :: forall a. Elt a
     => (Exp a -> Exp a -> Exp a)
     -> Exp a
     -> Acc (Field (Hexahedron a))
     -> Acc (Field a)
-distributeElemNodesToDomainNodes f zero arr =
+distributeToNode f zero arr =
   let
       numElem           = unindex3 (shape arr) ^. _2
       numNode           = numElem + 1
@@ -113,7 +114,7 @@ distributeElemNodesToDomainNodes f zero arr =
            then (arr ! index3 z y x) ^. node
            else zero
 
-      mesh :: Exp DIM3 -> Exp a
+      mesh :: Exp Ix -> Exp a
       mesh (unlift -> Z :. z :. y :. x) =
         at z     y     x     _0 `f`
         at z     y     (x-1) _1 `f`
@@ -164,8 +165,8 @@ lagrangeNodal
     -> Acc (Field Velocity)
     -> Acc (Field Pressure)
     -> Acc (Field Viscosity)
-    -> Acc (Field Volume)       -- volume
-    -> Acc (Field Volume)       -- reference valume
+    -> Acc (Field Volume)       -- relative volume
+    -> Acc (Field Volume)       -- reference volume
     -> Acc (Field R)            -- speed of sound
     -> Acc (Field Mass)         -- element mass
     -> Acc (Field Mass)         -- nodal mass
@@ -208,7 +209,7 @@ calcForceForNodes
     -> Acc (Field Mass)
     -> Acc (Field Force)
 calcForceForNodes hgcoef position velocity pressure viscosity volume volumeRef soundSpeed elemMass
-  = distributeElemNodesToDomainNodes (+) 0
+  = distributeToNode (+) 0
   $ calcVolumeForceForElems hgcoef position velocity pressure viscosity volume volumeRef soundSpeed elemMass
 
 
@@ -242,7 +243,7 @@ calcVolumeForceForElems hgcoef position velocity pressure viscosity volume volum
       -- calculate nodal forces from element stresses
       (stress, _determ) = A.unzip
                         $ A.zipWith integrateStressForElems
-                                    (generate sh (collectDomainNodesToElemNodes position))
+                                    (generate sh (collectToElem position))
                                     sigma
 
       -- TODO: check for negative element volume
@@ -250,8 +251,8 @@ calcVolumeForceForElems hgcoef position velocity pressure viscosity volume volum
 
       -- Calculate the hourglass control contribution for each element
       hourglass         = generate sh $ \ix ->
-        let pos         = collectDomainNodesToElemNodes position ix
-            vel         = collectDomainNodesToElemNodes velocity ix
+        let pos         = collectToElem position ix
+            vel         = collectToElem velocity ix
 
             v           = volume     ! ix
             volo        = volumeRef  ! ix
