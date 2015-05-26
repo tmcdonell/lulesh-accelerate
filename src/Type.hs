@@ -16,11 +16,12 @@ type I = Int32                          -- Indices and subscripts
 
 type Ix                 = DIM3
 type Field a            = Array Ix a
-type Point              = V3 R
+type Position           = V3 R
 type Velocity           = V3 R
 type Acceleration       = V3 R
 type Normal             = V3 R
 
+type Mass               = R
 type Pressure           = R             -- The quantities that we are interested in
 type Volume             = R
 type Viscosity          = V3 R

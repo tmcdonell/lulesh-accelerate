@@ -43,13 +43,13 @@ data Domain = Domain
   {
     -- Node centred
     -- ------------
-    mesh                :: Field Point          -- (x, y, z)
-  , velocity            :: Array DIM3 (V3 R)    -- (xd, yd, zd)
-  , acceleration        :: Array DIM3 (V3 R)    -- (xdd, ydd, zdd)
-  , force               :: Array DIM3 (V3 R)    -- (fx, fy, fz)
-  , nodeMass            :: Array DIM3 R
+    mesh                :: Field Position               -- (x, y, z)
+  , velocity            :: Field Velocity               -- (xd, yd, zd)
+  , acceleration        :: Field Acceleration           -- (xdd, ydd, zdd)
+  , force               :: Field Force                  -- (fx, fy, fz)
+  , nodeMass            :: Field Mass
 
---  , symmetry            :: Vector (I,I,I)       -- symmetry plane nodesets
+--  , symmetry            :: Vector (I,I,I)             -- symmetry plane nodesets
 
     -- Element centred
     -- ---------------
