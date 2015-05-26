@@ -57,7 +57,7 @@ step1 Domain{..}
 -- -----------------------------------------------------------------------------
 
 -- Utilities
--- ---------
+-- =========
 
 
 -- Use rebindable syntax to improve readability of branches in scalar code.
@@ -126,6 +126,16 @@ distributeToNode f zero arr =
         at (z-1) (y-1) x     _7
   in
   generate sh' mesh
+
+
+collectFace :: Int -> Exp (Hexahedron Position) -> Exp (Quad Position)
+collectFace 0 p = lift (p^._0, p^._1, p^._2, p^._3)
+collectFace 1 p = lift (p^._0, p^._4, p^._5, p^._1)
+collectFace 2 p = lift (p^._1, p^._5, p^._6, p^._2)
+collectFace 3 p = lift (p^._2, p^._6, p^._7, p^._3)
+collectFace 4 p = lift (p^._3, p^._7, p^._4, p^._0)
+collectFace 5 p = lift (p^._4, p^._7, p^._6, p^._5)
+collectFace _ _ = error "collectFace: there are only six faces on a hexahedron"
 
 
 -- Lagrange Leapfrog Algorithm
@@ -375,24 +385,24 @@ calcElemNodeNormals p =
       -- The direction that we trace out the coordinates forming a face is such
       -- that it points towards the inside the hexahedron (RH-rule)
       --
-      n0123     = surfaceElemFaceNormal (lift (p^._0, p^._1, p^._2, p^._3))
-      n0451     = surfaceElemFaceNormal (lift (p^._0, p^._4, p^._5, p^._1))
-      n1562     = surfaceElemFaceNormal (lift (p^._1, p^._5, p^._6, p^._2))
-      n2673     = surfaceElemFaceNormal (lift (p^._2, p^._6, p^._7, p^._3))
-      n3740     = surfaceElemFaceNormal (lift (p^._3, p^._7, p^._4, p^._0))
-      n4765     = surfaceElemFaceNormal (lift (p^._4, p^._7, p^._6, p^._5))
+      n0     = surfaceElemFaceNormal (collectFace 0 p)  -- corners: 0, 1, 2, 3
+      n1     = surfaceElemFaceNormal (collectFace 1 p)  -- corners: 0, 4, 5, 1
+      n2     = surfaceElemFaceNormal (collectFace 2 p)  -- corners: 1, 5, 6, 2
+      n3     = surfaceElemFaceNormal (collectFace 3 p)  -- corners: 2, 6, 7, 3
+      n4     = surfaceElemFaceNormal (collectFace 4 p)  -- corners: 3, 7, 4, 0
+      n5     = surfaceElemFaceNormal (collectFace 5 p)  -- corners: 4, 7, 6, 5
 
       -- The normal at each node is then the sum of the normals of the three
       -- faces that meet at that node.
   in
-  lift ( n0123 + n0451 + n3740
-       , n0123 + n0451 + n1562
-       , n0123 + n1562 + n2673
-       , n0123 + n2673 + n3740
-       , n0451 + n3740 + n4765
-       , n0451 + n1562 + n4765
-       , n1562 + n2673 + n4765
-       , n2673 + n3740 + n4765
+  lift ( n0 + n1 + n4
+       , n0 + n1 + n2
+       , n0 + n2 + n3
+       , n0 + n3 + n4
+       , n1 + n4 + n5
+       , n1 + n2 + n5
+       , n2 + n3 + n5
+       , n3 + n4 + n5
        )
 
 
