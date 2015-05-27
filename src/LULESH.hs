@@ -11,7 +11,7 @@ import Options
 import Type
 
 import Prelude                                          as P hiding ( (<*) )
-import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate                            as A hiding ( transpose )
 import Data.Array.Accelerate.Linear                     as L
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
@@ -684,7 +684,10 @@ calcKinematicsForElems
     -> Acc (Field Volume)       -- relative volume
     -> Acc (Field Volume)       -- reference volume
     -> ()
-calcKinematicsForElems dt pos vel relVol refVol =
+calcKinematicsForElems dt positions velocity relVol refVol =
+--  let
+--      positions = collectToElem pos
+--  in
   ()
 
 
@@ -740,4 +743,42 @@ calcElemCharacteristicLength p v =
            $ P.map (flip collectFace p) [0..5]
   in
   4.0 * v / sqrt area
+
+
+-- | Calculate the element velocity gradient which defines the terms of
+-- epsilon_tot. The diagonal entries of epsilon_tot are then used to initialise
+-- the diagonal entries of the strain rate tensor epsilon.
+--
+calcElemVelocityGradient
+    :: Exp (Hexahedron Velocity)
+    -> Exp (Hexahedron Force)
+    -> Exp Volume
+    -> Exp (V3 R)
+calcElemVelocityGradient v b det =
+  let
+      -- TLM: unfortunately the (Accelerate) simplifier does not spot that the
+      --      off-diagonal elements of the matrix are unused. Thus, we will need
+      --      to rely on the code generator / backend compiler to remove those
+      --      expressions as dead code.
+      --
+      inv_det = 1 / det
+      mm      = inv_det *!! (transpose pf !*! vd)
+
+      vd :: Exp (M43 R)
+      vd = lift $ V4 (v^._0 - v^._6)
+                     (v^._1 - v^._7)
+                     (v^._2 - v^._4)
+                     (v^._3 - v^._5)
+
+      pf :: Exp (M43 R)
+      pf = lift $ V4 (b^._0)
+                     (b^._1)
+                     (b^._2)
+                     (b^._3)
+
+      -- d3 = 0.5 * ( mm^._z._y + mm^._y._z )   -- 0.5 * ( dzddy + dyddz )
+      -- d4 = 0.5 * ( mm^._x._z + mm^._z._x )   -- 0.5 * ( dxddz + dzddx )
+      -- d5 = 0.5 * ( mm^._x._y + mm^._y._x )   -- 0.5 * ( dxddy + dyddx )
+  in
+  diagonal mm
 
