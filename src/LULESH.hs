@@ -128,7 +128,7 @@ distributeToNode f zero arr =
   generate sh' mesh
 
 
-collectFace :: Int -> Exp (Hexahedron Position) -> Exp (Quad Position)
+collectFace :: Elt a => Int -> Exp (Hexahedron a) -> Exp (Quad a)
 collectFace 0 p = lift (p^._0, p^._1, p^._2, p^._3)
 collectFace 1 p = lift (p^._0, p^._4, p^._5, p^._1)
 collectFace 2 p = lift (p^._1, p^._5, p^._6, p^._2)
@@ -817,4 +817,69 @@ calcElemVelocityGradient v b det =
       -- d5 = 0.5 * ( mm^._x._y + mm^._y._x )   -- 0.5 * ( dxddy + dyddx )
   in
   diagonal mm
+
+
+-- | Calculate the artificial viscosity term for each element. The mathematical
+-- aspects of the algorithm are described in [2]:
+--
+--   [2] Christensen, Randy B. "Godunov methods on a staggered mesh: An improved
+--       artificial viscosity". Lawrence Livermore National Laboratory Report,
+--       UCRL-JC-105-269, 1991. https://e-reports-ext.llnl.gov/pdf/219547.pdf
+--
+calcQForElems
+    :: Acc (Field Position)
+    -> Acc (Field Velocity)
+    -> Acc (Field Viscosity)
+    -> Acc (Field Volume)
+    -> Acc (Field Volume)
+    -> Acc (Field Mass)
+    -> Acc (Field R)            -- vdot / v
+    -> ()
+calcQForElems position velocity viscosity relativeVolume referenceVolume mass vdov =
+  ()
+
+
+-- | Calculate discrete spatial gradients of nodal coordinates and velocity
+-- gradients with respect to a reference coordinate system. The following maps
+-- an element to the unit cube:
+--
+--   (x,y,z) ↦ (xi, eta, zeta)
+--
+-- Mapping the element to the unit cube simplifies the process of defining a
+-- single value for the viscosity in the element from the gradient information.
+--
+calcMonotonicQGradientsForElem
+    :: Exp (Hexahedron Position)
+    -> Exp (Hexahedron Velocity)
+    -> Exp Volume
+    -> Exp Volume
+    -> Exp (Position, Velocity)         -- gradients
+calcMonotonicQGradientsForElem p v volRel vol0 =
+  let
+      vol               = volRel * vol0
+      ivol              = 1 / vol
+
+      p_eta, p_xi, p_zeta :: Exp Position
+      p_eta             = 0.25 *^ (sumOf each (collectFace 3 p) - sumOf each (collectFace 1 p))
+      p_xi              = 0.25 *^ (sumOf each (collectFace 2 p) - sumOf each (collectFace 4 p))
+      p_zeta            = 0.25 *^ (sumOf each (collectFace 5 p) - sumOf each (collectFace 0 p))
+
+      v_eta, v_xi, v_zeta :: Exp Velocity
+      v_eta             = 0.25 *^ (sumOf each (collectFace 3 v) - sumOf each (collectFace 1 v))
+      v_xi              = 0.25 *^ (sumOf each (collectFace 2 v) - sumOf each (collectFace 4 v))
+      v_zeta            = 0.25 *^ (sumOf each (collectFace 5 v) - sumOf each (collectFace 0 v))
+
+      a                 = cross p_xi   p_eta
+      b                 = cross p_eta  p_zeta
+      c                 = cross p_zeta p_xi
+
+      delta_x           = V3 (vol / norm b)
+                             (vol / norm c)
+                             (vol / norm a)
+
+      delta_v           = V3 (ivol * dot b v_xi)
+                             (ivol * dot c v_eta)
+                             (ivol * dot a v_zeta)
+  in
+  lift (delta_x, delta_v)
 
