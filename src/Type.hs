@@ -8,25 +8,32 @@ import Control.Lens                             ( Lens, Field1, Field2, Field3, 
 import qualified Control.Lens.Tuple             as L
 
 
+type R                  = Double        -- Floating point representation
+type I                  = Int32         -- Indices and subscripts
+type Ix                 = DIM3
+
+type Field a            = Array Ix a
 type Quad a             = (a, a, a, a)
 type Hexahedron a       = (a, a, a, a, a, a, a, a)
 
-type R = Double                         -- Floating point representation
-type I = Int32                          -- Indices and subscripts
+-- Nodal quantities
+type Position           = V3 R          -- position vector (old: x,y,z)
+type Velocity           = V3 R          -- velocity vector (old: xd, yd, zd)
+type Acceleration       = V3 R          -- acceleration vector (old: xdd, ydd, zdd)
+type Force              = V3 R          -- force vector (old: fx, fy, fz)
+type Mass               = R             -- nodal mass (old: nodalMass)
 
-type Ix                 = DIM3
-type Field a            = Array Ix a
-type Position           = V3 R
-type Velocity           = V3 R
-type Acceleration       = V3 R
-type Normal             = V3 R
+-- Element quantities
+type Pressure           = R             -- pressure (old: p)
+type Energy             = R             -- internal energy (old: e)
+type Volume             = R             -- relative volume (old: v)
+type Viscosity          = V3 R          -- artificial viscosity (old: qq, ql, q)
+type Epsilon            = V3 R          -- diagonal terms of deviatoric strain (old: dxx, dyy, dzz)
 
-type Mass               = R
-type Pressure           = R             -- The quantities that we are interested in
-type Volume             = R
-type Viscosity          = V3 R
-type Sigma              = V3 R
-type Force              = V3 R
+-- Other useful type synonyms
+type Normal             = V3 R          -- normal vector
+type Sigma              = V3 R          -- stress term
+type Timestep           = R
 
 
 -- Node numbering in LULESH is zero-based. Rename the one-based tuple accessors

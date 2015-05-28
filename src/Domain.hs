@@ -7,7 +7,7 @@ import Options
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
-import Data.Array.Accelerate.Linear
+import Data.Array.Accelerate.Linear             hiding ( Epsilon )
 
 -- The size of the simulation box
 --
@@ -64,9 +64,10 @@ data Domain = Domain
 --   ... element connectivity across each face
 --   ... symmetric/free surface flags for each element face
 
-  , energy              :: Array DIM3 R         -- e
-  , pressure            :: Field Pressure       -- p
-  , viscosity           :: Field Viscosity      -- (qq, ql, q)
+  , energy              :: Field Energy                 -- e
+  , pressure            :: Field Pressure               -- p
+  , viscosity           :: Field Viscosity              -- (qq, ql, q)
+  , strains             :: Field Epsilon                -- principal strains (dxx, dyy, dzz)
 
 --  , viscosity           :: Array DIM3 R         -- q
 --  , viscosity_linear    :: Vector R             -- ql

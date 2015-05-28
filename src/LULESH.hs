@@ -12,7 +12,7 @@ import Type
 
 import Prelude                                          as P hiding ( (<*) )
 import Data.Array.Accelerate                            as A hiding ( transpose )
-import Data.Array.Accelerate.Linear                     as L
+import Data.Array.Accelerate.Linear                     as L hiding ( Epsilon )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
 
@@ -240,11 +240,11 @@ calcVolumeForceForElems hgcoef position velocity pressure viscosity volumeRel vo
       sh                = index3 numElem numElem numElem
 
       -- sum contributions to total stress tensor
-      sigma             = A.zipWith initStressTermsForElems pressure viscosity
+      sigma             = A.zipWith initStressTermsForElem pressure viscosity
 
       -- calculate nodal forces from element stresses
       (stress, _determ) = A.unzip
-                        $ A.zipWith integrateStressForElems
+                        $ A.zipWith integrateStressForElem
                                     (generate sh (collectToElem position))
                                     sigma
 
@@ -261,7 +261,7 @@ calcVolumeForceForElems hgcoef position velocity pressure viscosity volumeRel vo
             ss          = soundSpeed ! ix
             mass        = elemMass   ! ix
         in
-        calcHourglassControlForElems pos vel volo v ss mass hgcoef
+        calcHourglassControlForElem pos vel volo v ss mass hgcoef
 
       -- Add the nodal forces
       combine :: Exp (Hexahedron Force) -> Exp (Hexahedron Force) -> Exp (Hexahedron Force)
@@ -282,11 +282,11 @@ calcVolumeForceForElems hgcoef position velocity pressure viscosity volumeRel vo
 -- are equal, and the shear stresses are zero. Thus, we initialize the diagonal
 -- terms of the stress tensor sigma to −(p + q) in each element.
 --
-initStressTermsForElems
+initStressTermsForElem
     :: Exp Pressure
     -> Exp Viscosity
     -> Exp Sigma
-initStressTermsForElems p (view _z -> q) =
+initStressTermsForElem p (view _z -> q) =
   let s = -p - q
   in  lift (V3 s s s)
 
@@ -300,11 +300,11 @@ initStressTermsForElems p (view _z -> q) =
 -- Instead, we just return all the values directly, and the individual
 -- contributions to the nodes will be combined in a different step.
 --
-integrateStressForElems
+integrateStressForElem
     :: Exp (Hexahedron Position)
     -> Exp Sigma
     -> Exp (Hexahedron Force, Volume)
-integrateStressForElems p sigma =
+integrateStressForElem p sigma =
   let
       -- Volume calculation involves extra work for numerical consistency
       det    = calcElemShapeFunctionDerivatives p ^._1
@@ -463,7 +463,7 @@ calcElemVolumeDerivative p =
 --         hourglass control", Flanagan, D. P. and Belytschko, T. International
 --         Journal for Numerical Methods in Engineering, (17) 5, May 1981.
 --
-calcHourglassControlForElems
+calcHourglassControlForElem
     :: Exp (Hexahedron Position)
     -> Exp (Hexahedron Velocity)
     -> Exp Volume                       -- relative volume
@@ -472,16 +472,16 @@ calcHourglassControlForElems
     -> Exp Mass                         -- mass
     -> Exp R
     -> Exp (Hexahedron Force)
-calcHourglassControlForElems pos vel volo v ss mass hourg =
+calcHourglassControlForElem pos vel volo v ss mass hourg =
   let dvol      = calcElemVolumeDerivative pos
       determ    = volo * v
   in
   if hourg >* 0
-     then calcFBHourglassForceForElems pos vel determ dvol ss mass hourg
+     then calcFBHourglassForceForElem pos vel determ dvol ss mass hourg
      else constant (0,0,0,0,0,0,0,0)
 
 
-calcFBHourglassForceForElems
+calcFBHourglassForceForElem
     :: Exp (Hexahedron Position)
     -> Exp (Hexahedron Velocity)
     -> Exp Volume
@@ -490,7 +490,7 @@ calcFBHourglassForceForElems
     -> Exp Mass                         -- mass
     -> Exp R
     -> Exp (Hexahedron Force)
-calcFBHourglassForceForElems pos vel determ dvol ss mass hourg =
+calcFBHourglassForceForElem pos vel determ dvol ss mass hourg =
   let
       -- Hourglass base vectors, from [1] table 1. This defines the hourglass
       -- patterns for a unit cube.
@@ -606,8 +606,8 @@ applyAccelerationBoundaryConditionsForNodes acc =
 -- zero.
 --
 calcVelocityForNodes
-    :: Exp R
-    -> Exp R
+    :: Exp Timestep
+    -> Exp Energy                       -- cutoff energy
     -> Acc (Field Velocity)
     -> Acc (Field Acceleration)
     -> Acc (Field Velocity)
@@ -618,7 +618,7 @@ calcVelocityForNodes dt ucut u ud
 -- | Integrate the velocity at each node to advance the position of the node
 --
 calcPositionForNodes
-    :: Exp R
+    :: Exp Timestep
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Position)
@@ -628,7 +628,7 @@ calcPositionForNodes = integrate
 -- | Euler integration
 --
 integrate
-    :: Exp R
+    :: Exp Timestep
     -> Acc (Field (V3 R))
     -> Acc (Field (V3 R))
     -> Acc (Field (V3 R))
@@ -650,45 +650,81 @@ integrate dt
 --   4. Compute updated element volume
 --
 lagrangeElements
-    :: Exp R                    -- timestep
+    :: Exp Timestep
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Volume)
     -> Acc (Field Mass)
     -> ()
-lagrangeElements dt position velocity volume _ =
+lagrangeElements dt position velocity volume elemMass =
   ()
 
 
 -- | Calculate various element quantities that are based on the new kinematic
 -- node quantities position and velocity.
 --
+-- TODO: Check for negative element volume
+--
 calcLagrangeElements
-    :: Exp R                    -- timestep
-    -> Acc (Field Position)
-    -> Acc (Field Velocity)
+    :: Exp Timestep
+    -> Acc (Field Position)     -- nodal position
+    -> Acc (Field Velocity)     -- nodal velocity
     -> Acc (Field Volume)       -- relative volume
     -> Acc (Field Volume)       -- reference volume
     -> ()
-calcLagrangeElements dt pos vel relVol refVol =
+calcLagrangeElements dt position velocity relativeVolume referenceVolume =
+  let
+      numNode           = unindex3 (shape position) ^. _2
+      numElem           = numNode - 1
+      sh                = index3 numElem numElem numElem
+  in
   ()
 
 
 -- | Calculate terms in the total strain rate tensor epsilon_tot that are used
 -- to compute the terms in the deviatoric strain rate tensor epsilon.
 --
-calcKinematicsForElems
-    :: Exp R                    -- timestep
-    -> Acc (Field Position)
-    -> Acc (Field Velocity)
-    -> Acc (Field Volume)       -- relative volume
-    -> Acc (Field Volume)       -- reference volume
-    -> ()
-calcKinematicsForElems dt positions velocity relVol refVol =
---  let
---      positions = collectToElem pos
---  in
-  ()
+calcKinematicsForElem
+    :: Exp Timestep
+    -> Exp (Hexahedron Position)
+    -> Exp (Hexahedron Velocity)
+    -> Exp Volume
+    -> Exp Volume
+    -> Exp (Volume, Volume, R, R)
+calcKinematicsForElem dt p v volRelOld vol0 =
+  let
+      -- (relative) volume calculations
+      vol       = calcElemVolume p
+      volRel    = vol / vol0
+      deltaVol  = volRel - volRelOld
+
+      -- characteristic length
+      arealg    = calcElemCharacteristicLength p vol
+
+      -- modify nodal positions to be halfway between time(n) and time(n+1)
+      mid :: Exp (V3 R) -> Exp (V3 R) -> Exp (V3 R)
+      mid x xd  = x - 0.5 * dt *^ xd
+
+      p'        = lift ( mid (p^._0) (v^._0)
+                       , mid (p^._1) (v^._1)
+                       , mid (p^._2) (v^._2)
+                       , mid (p^._3) (v^._3)
+                       , mid (p^._4) (v^._4)
+                       , mid (p^._5) (v^._5)
+                       , mid (p^._6) (v^._6)
+                       , mid (p^._7) (v^._7)
+                       )
+
+      -- Use midpoint nodal positions to calculate velocity gradient and
+      -- strain rate tensor
+      (b, det)  = unlift $ calcElemShapeFunctionDerivatives p'
+      d         = calcElemVelocityGradient v b det
+
+      -- calculate the deviatoric strain rate tensor
+      vdov      = P.sum (unlift d :: V3 (Exp R))        -- no foldable instance for (Exp V3) ):
+      strain    = d ^- (vdov / 3.0)
+  in
+  lift (volRel, deltaVol, vdov, arealg)
 
 
 -- | Calculate the volume of an element given the nodal coordinates
