@@ -15,6 +15,7 @@ type Ix                 = DIM3
 type Field a            = Array Ix a
 type Quad a             = (a, a, a, a)
 type Hexahedron a       = (a, a, a, a, a, a, a, a)
+type Gradient a         = a
 
 -- Nodal quantities
 type Position           = V3 R          -- position vector (old: x,y,z)

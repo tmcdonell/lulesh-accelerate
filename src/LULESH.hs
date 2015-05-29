@@ -102,7 +102,7 @@ distributeToNode
     -> Acc (Field a)
 distributeToNode f zero arr =
   let
-      numElem           = unindex3 (shape arr) ^. _2
+      numElem           = indexHead (shape arr)
       numNode           = numElem + 1
       sh'               = index3 numNode numNode numNode
 
@@ -235,7 +235,7 @@ calcVolumeForceForElems
     -> Acc (Field (Hexahedron Force))
 calcVolumeForceForElems hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass =
   let
-      numNode           = unindex3 (shape position) ^. _2
+      numNode           = indexHead (shape position)
       numElem           = numNode - 1
       sh                = index3 numElem numElem numElem
 
@@ -674,7 +674,7 @@ calcLagrangeElements
     -> ()
 calcLagrangeElements dt position velocity relativeVolume referenceVolume =
   let
-      numNode           = unindex3 (shape position) ^. _2
+      numNode           = indexHead (shape position)
       numElem           = numNode - 1
       sh                = index3 numElem numElem numElem
   in
@@ -826,6 +826,8 @@ calcElemVelocityGradient v b det =
 --       artificial viscosity". Lawrence Livermore National Laboratory Report,
 --       UCRL-JC-105-269, 1991. https://e-reports-ext.llnl.gov/pdf/219547.pdf
 --
+-- TODO: Don't allow excessive artificial viscosity. If any q > qstop: exit
+--
 calcQForElems
     :: Acc (Field Position)
     -> Acc (Field Velocity)
@@ -836,6 +838,15 @@ calcQForElems
     -> Acc (Field R)            -- vdot / v
     -> ()
 calcQForElems position velocity viscosity relativeVolume referenceVolume mass vdov =
+  let
+      -- calculate velocity gradients
+      -- calcMonotonicQGradientsForElem ...
+
+      -- Transfer velocity gradients in the first order elements
+      -- calcMonotonicQForElem
+
+      -- TODO: don't allow excessive artificial viscosity
+  in
   ()
 
 
@@ -853,7 +864,7 @@ calcMonotonicQGradientsForElem
     -> Exp (Hexahedron Velocity)
     -> Exp Volume
     -> Exp Volume
-    -> Exp (Position, Velocity)         -- gradients
+    -> Exp (Gradient Position, Gradient Velocity)
 calcMonotonicQGradientsForElem p v volRel vol0 =
   let
       vol               = volRel * vol0
@@ -873,13 +884,82 @@ calcMonotonicQGradientsForElem p v volRel vol0 =
       b                 = cross p_eta  p_zeta
       c                 = cross p_zeta p_xi
 
-      delta_x           = V3 (vol / norm b)
+      grad_x            = V3 (vol / norm b)
                              (vol / norm c)
                              (vol / norm a)
 
-      delta_v           = V3 (ivol * dot b v_xi)
+      grad_v            = V3 (ivol * dot b v_xi)
                              (ivol * dot c v_eta)
                              (ivol * dot a v_zeta)
   in
-  lift (delta_x, delta_v)
+  lift (grad_x, grad_v)
+
+
+-- | Use the spatial gradient information to compute linear and quadratic terms
+-- for viscosity. The actual element values of viscosity (q) are calculated
+-- during application of material properties in each element; see
+-- 'applyMaterialPropertiesForElem'.
+--
+calcMonotonicQForElems
+    :: Exp R
+    -> Exp R
+    -> Exp R
+    -> Exp R
+    -> Acc (Field (Gradient Position))
+    -> Acc (Field (Gradient Velocity))
+    -> Acc (Field Mass)
+    -> Acc (Field Volume)
+    -> Acc (Field Volume)
+    -> Acc (Field R)                    -- vdot / v
+    -> Acc (Field (R, R))               -- qq, ql
+calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volNew elemMass vdov =
+  let
+      sh                = shape grad_x
+      numElem           = indexHead sh
+
+      -- Need to compute a stencil on the neighbouring elements of the velocity
+      -- gradients. However, we have different boundary conditions depending on
+      -- whether we are at an internal/symmetric (= clamp) or external/free (=
+      -- set to zero) face. This procedure encodes that decision.
+      --
+      get :: Exp Int -> Exp Int -> Exp Int -> Exp (Gradient Velocity)
+      get z y x =
+        if x >=* numElem ||* y >=* numElem ||* z >=* numElem
+           then zero                                            -- external face
+           else grad_v ! index3 (max 0 z) (max 0 y) (max 0 x)   -- internal region
+
+      -- Calculate one component of the phi term
+      --
+      calcPhi :: Exp R -> Exp R -> Exp R
+      calcPhi m p =
+        let
+            phi = 0.5 * (m + p)
+            m'  = m * monoq_scale
+            p'  = p * monoq_scale
+        in
+        m' `min` phi `min` p' `max` 0 `min` monoq_limit
+
+      -- Calculate linear and quadratic terms for viscosity
+      --
+      viscosity = generate sh $ \ix@(unlift -> Z:.z:.y:.x) ->
+        let
+            phi = lift $
+              V3 (calcPhi (get  z    y   (x-1) ^._x) (get  z    y   (x+1) ^._x))
+                 (calcPhi (get  z   (y-1) x    ^._y) (get  z   (y+1) x    ^._y))
+                 (calcPhi (get (z-1) y    x    ^._z) (get (z+1) y    x    ^._z))
+
+            -- remove length scale
+            dx          = grad_x ! ix
+            dv          = grad_v ! ix
+            dvx         = lift1 (fmap (max 0) :: V3 (Exp R) -> V3 (Exp R)) (dx * dv)
+
+            rho         = elemMass!ix / (volRef!ix * volNew!ix)
+            qlin        = -qlc * rho * dot dvx       (1 - phi)
+            qquad       = -qqc * rho * dot (dvx*dvx) (1 - phi*phi)
+        in
+        if vdov ! ix >* 0
+           then constant (0,0)
+           else lift (qlin, qquad)
+  in
+  viscosity
 
