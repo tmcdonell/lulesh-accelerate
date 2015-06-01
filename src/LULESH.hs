@@ -982,6 +982,29 @@ calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volN
   in
   viscosity
 
+-- | Calculate the "gamma law" model of a gas:
+--
+--    P = (gamma - 1) (rho / rho0) e
+--
+--
+calcPressureForElem
+    :: Exp Pressure             -- pressure floor
+    -> Exp Pressure             -- pressure tolerance
+    -> Exp Energy
+    -> Exp Volume
+    -> Exp R
+    -> (Exp Pressure, Exp R, Exp R)
+calcPressureForElem p_min p_cut e vol comp =
+  let
+      c1s       = 2/3           -- defined to be (gamma - 1)
+      bvc       = c1s * (comp + 1)
+      pbvc      = c1s
+      p_new     = bvc * e
+      p_new'    = if abs p_new <* p_cut then 0 else p_new
+  in
+  ( max p_min p_new', bvc, pbvc )
+
+
 -- | Calculate the speed of sound in each element
 --
 --    c_sound = (p*e + V^2*p*(gamma-1)*(1/(V-1)+1)) / rho0
