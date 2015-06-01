@@ -87,30 +87,6 @@ data Domain = Domain
 
   , elemMass            :: Array DIM3 R         -- mass
 
-    -- Cutoffs (constants)
-    -- -------------------
-  , e_cut               :: R                    -- energy tolerance
-  , p_cut               :: R                    -- pressure tolerance
-  , q_cut               :: R                    -- viscosity tolerance
-  , v_cut               :: R                    -- relative volume tolerance
-  , u_cut               :: R                    -- velocity tolerance
-
-    -- Other constants
-    -- ---------------
-  , hgcoef              :: R                    -- hourglass coefficient
-  , qstop               :: R                    -- excessive viscosity indicator
-  , monoq_max_slope     :: R
-  , monoq_limiter       :: R
-  , qlc_monoq           :: R                    -- linear term coefficient for viscosity
-  , qqc_monoq           :: R                    -- quadratic term for coefficient for viscosity
-  , qqc                 :: R
-  , eosvmax             :: R
-  , eosvmin             :: R
-  , pmin                :: R                    -- pressure floor
-  , emin                :: R                    -- energy floor
-  , dvovmax             :: R                    -- maximum allowable volume change
-  , refdens             :: R                    -- reference density
-
     -- Simulation variables
     -- --------------------
   , iteration           :: Int                  -- simulation iteration
@@ -121,6 +97,35 @@ data Domain = Domain
   , dt_max              :: R                    -- maximum allowable time increment
   , dt_courant          :: R                    -- courant constraint
   , dt_hydro            :: R                    -- volume change constraint
+  }
+  deriving Show
+
+
+data Parameters = Parameters
+  {
+    -- Cutoffs
+    -- -------
+    e_cut               :: Exp R                -- energy tolerance
+  , p_cut               :: Exp R                -- pressure tolerance
+  , q_cut               :: Exp R                -- viscosity tolerance
+  , v_cut               :: Exp R                -- relative volume tolerance
+  , u_cut               :: Exp R                -- velocity tolerance
+  , p_min               :: Exp R                -- pressure floor
+  , e_min               :: Exp R                -- energy floor
+
+    -- Other constants
+    -- ---------------
+  , hgcoef              :: Exp R                -- hourglass coefficient
+  , qstop               :: Exp R                -- excessive viscosity indicator
+  , monoq_max_slope     :: Exp R
+  , monoq_limiter       :: Exp R
+  , qlc_monoq           :: Exp R                -- linear term coefficient for viscosity
+  , qqc_monoq           :: Exp R                -- quadratic term for coefficient for viscosity
+  , qqc                 :: Exp R
+  , eosvmax             :: Exp R
+  , eosvmin             :: Exp R
+  , dvovmax             :: Exp R                -- maximum allowable volume change
+  , ref_dens            :: Exp R                -- reference density
   }
   deriving Show
 
@@ -160,27 +165,6 @@ initDomain Options{..} =
   , ss                  = e0
   , elemMass            = ev
 
-    -- constants
-  , e_cut               = 1.0e-7
-  , p_cut               = 1.0e-7
-  , q_cut               = 1.0e-7
-  , u_cut               = 1.0e-7
-  , v_cut               = 1.0e-7
-
-  , hgcoef              = 3.0
-  , qstop               = 1.0e12
-  , monoq_max_slope     = 1.0
-  , monoq_limiter       = 2.0
-  , qlc_monoq           = 0.5
-  , qqc_monoq           = 2.0/3.0
-  , qqc                 = 2.0
-  , eosvmax             = 1.0e+9
-  , eosvmin             = 1.0e-9
-  , pmin                = 0
-  , emin                = -1.0e15
-  , dvovmax             = 0.1
-  , refdens             = 1.0
-
     -- simulation parameters
   , iteration           = 0
   , time                = 0
@@ -191,6 +175,31 @@ initDomain Options{..} =
   , dt_courant          = 1.0e20
   , dt_hydro            = 1.0e20
   }
+
+parameters :: Parameters
+parameters = Parameters
+  {
+    e_cut               = 1.0e-7
+  , p_cut               = 1.0e-7
+  , q_cut               = 1.0e-7
+  , u_cut               = 1.0e-7
+  , v_cut               = 1.0e-7
+  , p_min               = 0
+  , e_min               = -1.0e15
+
+  , hgcoef              = 3.0
+  , qstop               = 1.0e12
+  , monoq_max_slope     = 1.0
+  , monoq_limiter       = 2.0
+  , qlc_monoq           = 0.5
+  , qqc_monoq           = 2.0/3.0
+  , qqc                 = 2.0
+  , eosvmax             = 1.0e+9
+  , eosvmin             = 1.0e-9
+  , dvovmax             = 0.1
+  , ref_dens            = 1.0
+  }
+
 
 
 -- Deposit some energy at the origin. The simulation is symmetric so we only

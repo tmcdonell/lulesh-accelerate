@@ -669,19 +669,7 @@ integrate dt
 --   4. Compute updated element volume
 --
 lagrangeElements
-    :: Exp Viscosity            -- viscosity scaling factor
-    -> Exp Viscosity            -- viscosity limiter
-    -> Exp Viscosity            -- scaling for linear component of viscosity
-    -> Exp Viscosity            -- scaling for quadratic part of viscosity
-    -> Exp Volume               -- minimum volume
-    -> Exp Volume               -- maximum volume
-    -> Exp Density              -- reference density
-    -> Exp Energy               -- energy floor
-    -> Exp Energy               -- energy tolerance
-    -> Exp Pressure             -- pressure floor
-    -> Exp Pressure             -- pressure tolerance
-    -> Exp Viscosity            -- viscosity tolerance
-    -> Exp Volume               -- volume tolerance
+    :: Parameters
     -> Exp Timestep
     -> Acc (Field Position)
     -> Acc (Field Velocity)
@@ -692,9 +680,7 @@ lagrangeElements
     -> Acc (Field Pressure)
     -> Acc (Field Mass)
     -> Acc (Field Pressure, Field Energy, Field Viscosity, Field Volume, Field R, Field R)
-lagrangeElements
-  q_scale q_limit qlc qqc eosvmin eosvmax rho_ref e_min e_cut p_min p_cut q_cut vol_cut -- params
-  dt position velocity relativeVolume referenceVolume viscosity energy pressure elemMass =
+lagrangeElements params dt position velocity relativeVolume referenceVolume viscosity energy pressure elemMass =
   let
       (newVol, deltaVol, vdov, arealg :: Acc (Field R))
           = unlift
@@ -702,20 +688,13 @@ lagrangeElements
 
       (ql, qq)
           = unlift
-          $ calcQForElems q_scale q_limit qlc qqc position velocity newVol referenceVolume elemMass vdov
+          $ calcQForElems params position velocity newVol referenceVolume elemMass vdov
 
       (p, e, q, ss)
           = A.unzip4
-          $ A.zipWith7 (calcEOSForElem eosvmin eosvmax rho_ref e_min e_cut p_min p_cut q_cut)
-                       newVol
-                       deltaVol
-                       energy
-                       pressure
-                       viscosity
-                       ql
-                       qq
+          $ A.zipWith7 (calcEOSForElem params) newVol deltaVol energy pressure viscosity ql qq
 
-      vol = A.map (updateVolumeForElem vol_cut) newVol
+      vol = A.map (updateVolumeForElem params) newVol
   in
   lift (p, e, q, vol, ss, arealg)
 
@@ -745,10 +724,10 @@ calcLagrangeElements dt position velocity relativeVolume referenceVolume =
             let
                 p       = collectToElem position ix
                 v       = collectToElem velocity ix
-                volRel  = relativeVolume  ! ix
-                volRef  = referenceVolume ! ix
+                vol     = relativeVolume  ! ix
+                vol0    = referenceVolume ! ix
             in
-            calcKinematicsForElem dt p v volRel volRef
+            calcKinematicsForElem dt p v vol vol0
   in
   lift (volRel, deltaVol, vdov, arealg)
 
@@ -901,10 +880,7 @@ calcElemVelocityGradient v b det =
 -- TODO: Don't allow excessive artificial viscosity. If any q > qstop: exit
 --
 calcQForElems
-    :: Exp R                    -- configuration parameters
-    -> Exp R
-    -> Exp R
-    -> Exp R
+    :: Parameters
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Volume)
@@ -912,9 +888,7 @@ calcQForElems
     -> Acc (Field Mass)
     -> Acc (Field R)            -- vdot / v
     -> Acc (Field Viscosity, Field Viscosity)
-calcQForElems
-  q_scale q_limit qlc qqc
-  position velocity relativeVolume referenceVolume mass vdov =
+calcQForElems params position velocity relativeVolume referenceVolume mass vdov =
   let
       numNode           = indexHead (shape position)
       numElem           = numNode - 1
@@ -935,7 +909,7 @@ calcQForElems
       -- Transfer velocity gradients in the first order elements
       (ql, qq)
         = A.unzip
-        $ calcMonotonicQForElems q_scale q_limit qlc qqc grad_p grad_v relativeVolume referenceVolume mass vdov
+        $ calcMonotonicQForElems params grad_p grad_v relativeVolume referenceVolume mass vdov
 
       -- TODO: don't allow excessive artificial viscosity
       -- A.maximum q >* qstop --> error
@@ -994,10 +968,7 @@ calcMonotonicQGradientsForElem p v volRel vol0 =
 -- 'applyMaterialPropertiesForElem'.
 --
 calcMonotonicQForElems
-    :: Exp R
-    -> Exp R
-    -> Exp R
-    -> Exp R
+    :: Parameters
     -> Acc (Field (Gradient Position))
     -> Acc (Field (Gradient Velocity))
     -> Acc (Field Mass)
@@ -1005,9 +976,7 @@ calcMonotonicQForElems
     -> Acc (Field Volume)
     -> Acc (Field R)                            -- vdot / v
     -> Acc (Field (Viscosity, Viscosity))       -- ql, qq
-calcMonotonicQForElems
-  q_scale q_limit qlc qqc
-  grad_x grad_v volNew volRef elemMass vdov =
+calcMonotonicQForElems param@Parameters{..} grad_x grad_v volNew volRef elemMass vdov =
   let
       sh                = shape grad_x
       numElem           = indexHead sh
@@ -1029,10 +998,10 @@ calcMonotonicQForElems
       calcPhi m p =
         let
             phi = 0.5 * (m + p)
-            m'  = m * q_scale
-            p'  = p * q_scale
+            m'  = m * monoq_max_slope
+            p'  = p * monoq_max_slope
         in
-        m' `min` phi `min` p' `max` 0 `min` q_limit
+        m' `min` phi `min` p' `max` 0 `min` monoq_limiter
 
       -- Calculate linear and quadratic terms for viscosity
       --
@@ -1049,8 +1018,8 @@ calcMonotonicQForElems
             dvx         = lift1 (fmap (max 0) :: V3 (Exp R) -> V3 (Exp R)) (dx * dv)
 
             rho         = elemMass!ix / (volRef!ix * volNew!ix)
-            qlin        = -qlc * rho * dot dvx       (1 - phi)
-            qquad       = -qqc * rho * dot (dvx*dvx) (1 - phi*phi)
+            qlin        = -qlc_monoq * rho * dot dvx       (1 - phi)
+            qquad       = -qqc_monoq * rho * dot (dvx*dvx) (1 - phi*phi)
         in
         if vdov ! ix >* 0
            then constant (0,0)
@@ -1066,14 +1035,7 @@ calcMonotonicQForElems
 -- which has been merged into this.
 --
 calcEOSForElem
-    :: Exp Volume               -- minimum volume
-    -> Exp Volume               -- maximum volume
-    -> Exp Density              -- reference density
-    -> Exp Energy               -- energy floor
-    -> Exp Energy               -- energy tolerance
-    -> Exp Pressure             -- pressure floor
-    -> Exp Pressure             -- pressure tolerance
-    -> Exp Viscosity            -- viscosity tolerance
+    :: Parameters
     -> Exp Volume
     -> Exp Volume
     -> Exp Energy
@@ -1082,9 +1044,7 @@ calcEOSForElem
     -> Exp Viscosity            -- linear term
     -> Exp Viscosity            -- quadratic term
     -> Exp (Pressure, Energy, Viscosity, R)
-calcEOSForElem
-  eosvmin eosvmax rho_ref e_min e_cut p_min p_cut q_cut -- params
-  vol delta_vol e p q ql qq =
+calcEOSForElem param@Parameters{..} vol delta_vol e p q ql qq =
   let
       clamp     = (\x -> if eosvmin /=* 0 then max eosvmin x else x)
                 . (\x -> if eosvmax /=* 0 then min eosvmax x else x)
@@ -1095,8 +1055,8 @@ calcEOSForElem
       comp      = 1 / vol' - 1
       comp'     = 1 / (vol' - delta_vol * 0.5) - 1
 
-      (e', p', q', bvc, pbvc)   = calcEnergyForElem rho_ref e_min e_cut p_min p_cut q_cut e p q ql qq comp comp' vol' delta_vol work
-      ss                        = calcSoundSpeedForElem rho_ref vol' e p bvc pbvc
+      (e', p', q', bvc, pbvc)   = calcEnergyForElem param e p q ql qq comp comp' vol' delta_vol work
+      ss                        = calcSoundSpeedForElem param vol' e p bvc pbvc
   in
   lift (p', e', q', ss)
 
@@ -1104,12 +1064,7 @@ calcEOSForElem
 -- | Calculate pressure and energy for an element
 --
 calcEnergyForElem
-    :: Exp Density              -- reference density
-    -> Exp Energy               -- energy floor
-    -> Exp Energy               -- energy tolerance
-    -> Exp Pressure             -- pressure floor
-    -> Exp Pressure             -- pressure tolerance
-    -> Exp Viscosity            -- viscosity tolerance
+    :: Parameters
     -> Exp Energy
     -> Exp Pressure
     -> Exp Viscosity
@@ -1121,13 +1076,11 @@ calcEnergyForElem
     -> Exp Volume
     -> Exp R                    -- work
     -> (Exp Energy, Exp Pressure, Exp Viscosity, Exp R, Exp R)
-calcEnergyForElem
-  rho_ref e_min e_cut p_min p_cut q_cut                                 -- config
-  e0 p0 q0 ql qq comp comp_half vol vol_delta work =     -- inputs
+calcEnergyForElem params@Parameters{..} e0 p0 q0 ql qq comp comp_half vol vol_delta work =
   let
       e1                = e_min `max` (e0 - 0.5 * vol_delta * (p0 + q0) + 0.5 * work)
-      (p1, bvc1, pbvc1) = calcPressureForElem p_min p_cut e1 vol comp_half
-      ssc1              = calcSoundSpeedForElem rho_ref (1/(1+comp_half)) e1 p1 bvc1 pbvc1
+      (p1, bvc1, pbvc1) = calcPressureForElem params e1 vol comp_half
+      ssc1              = calcSoundSpeedForElem params (1/(1+comp_half)) e1 p1 bvc1 pbvc1
       q1                = vol_delta >* 0 ? (0, ssc1 * ql + qq )
 
       e2                = let e = e1
@@ -1135,8 +1088,8 @@ calcEnergyForElem
                                 + 0.5 * work
                           in
                           abs e <* e_cut ? (0, max e_min e )
-      (p2, bvc2, pbvc2) = calcPressureForElem p_min p_cut e2 vol comp
-      ssc2              = calcSoundSpeedForElem rho_ref vol e2 p2 bvc2 pbvc2
+      (p2, bvc2, pbvc2) = calcPressureForElem params e2 vol comp
+      ssc2              = calcSoundSpeedForElem params vol e2 p2 bvc2 pbvc2
       q2                = vol_delta >* 0 ? (0, ssc2 * ql + qq)
 
       e3                = let e = e2 - 1/6 * vol_delta * ( 7.0 * (p0 + q0)
@@ -1144,8 +1097,8 @@ calcEnergyForElem
                                                          +       (p2 + q2) )
                           in
                           abs e <* e_cut ? (0, max e_min e)
-      (p3, bvc3, pbvc3) = calcPressureForElem p_min p_cut e3 vol comp
-      ssc3              = calcSoundSpeedForElem rho_ref vol e3 p3 bvc3 pbvc3
+      (p3, bvc3, pbvc3) = calcPressureForElem params e3 vol comp
+      ssc3              = calcSoundSpeedForElem params vol e3 p3 bvc3 pbvc3
       q3                = let q = ssc3 * ql + qq
                           in abs q >* q_cut ? (0, q)
   in
@@ -1158,19 +1111,20 @@ calcEnergyForElem
 --
 --
 calcPressureForElem
-    :: Exp Pressure             -- pressure floor
-    -> Exp Pressure             -- pressure tolerance
+    :: Parameters
     -> Exp Energy
     -> Exp Volume
     -> Exp R
     -> (Exp Pressure, Exp R, Exp R)
-calcPressureForElem p_min p_cut e vol comp =
+calcPressureForElem Parameters{..} e vol comp =
   let
-      c1s       = 2/3           -- defined to be (gamma - 1)
+      c1s       = 2/3                   -- defined to be (gamma - 1)
       bvc       = c1s * (comp + 1)
       pbvc      = c1s
       p_new     = bvc * e
-      p_new'    = if abs p_new <* p_cut then 0 else p_new
+      p_new'    = if abs p_new <* p_cut ||* vol >=* eosvmax
+                     then 0
+                     else p_new
   in
   ( max p_min p_new', bvc, pbvc )
 
@@ -1180,16 +1134,16 @@ calcPressureForElem p_min p_cut e vol comp =
 --    c_sound = (p*e + V^2*p*(gamma-1)*(1/(V-1)+1)) / rho0
 --
 calcSoundSpeedForElem
-    :: Exp Density              -- reference density
+    :: Parameters
     -> Exp Volume
     -> Exp Energy
     -> Exp Pressure
     -> Exp R
     -> Exp R
     -> Exp R
-calcSoundSpeedForElem rho_ref v e p bvc pbvc =
+calcSoundSpeedForElem Parameters{..} v e p bvc pbvc =
   let
-      ss = (pbvc * e + v * v * p * bvc ) / rho_ref
+      ss = (pbvc * e + v * v * p * bvc ) / ref_dens
   in
   if ss <=* 1.111111e-36
      then 0.333333e-18
@@ -1201,11 +1155,11 @@ calcSoundSpeedForElem rho_ref v e p bvc pbvc =
 -- roundoff error).
 --
 updateVolumeForElem
-    :: Exp Volume
+    :: Parameters
     -> Exp Volume
     -> Exp Volume
-updateVolumeForElem vol_cut vol =
-  if abs (vol - 1) <* vol_cut
+updateVolumeForElem Parameters{..} vol =
+  if abs (vol - 1) <* v_cut
      then 1
      else vol
 
