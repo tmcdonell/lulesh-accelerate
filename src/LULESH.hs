@@ -982,6 +982,27 @@ calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volN
   in
   viscosity
 
+-- | Calculate the speed of sound in each element
+--
+--    c_sound = (p*e + V^2*p*(gamma-1)*(1/(V-1)+1)) / rho0
+--
+calcSoundSpeedForElem
+    :: Exp R                    -- reference density
+    -> Exp Volume
+    -> Exp Energy
+    -> Exp Pressure
+    -> Exp R
+    -> Exp R
+    -> Exp R
+calcSoundSpeedForElem rho_ref v e p bvc pbvc =
+  let
+      ss = (pbvc * e + v * v * p * bvc ) / rho_ref
+  in
+  if ss <=* 1.111111e-36
+     then 0.333333e-18
+     else sqrt ss
+
+
 -- | Update the relative volume, using a tolerance to prevent spurious
 -- deviations from the initial values (which may arise due to floating point
 -- roundoff error).
