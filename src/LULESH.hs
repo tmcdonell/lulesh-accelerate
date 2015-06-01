@@ -982,6 +982,47 @@ calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volN
   in
   viscosity
 
+
+-- | Evaluate the Equation of State of the system to calculate the updated
+-- pressure and internal energy of an element.
+--
+-- The reference implementation had a function 'applyMaterialPropertiesForElem',
+-- which has been merged into this.
+--
+calcEOSForElem
+    :: Exp Volume               -- minimum volume
+    -> Exp Volume               -- maximum volume
+    -> Exp R                    -- reference density
+    -> Exp Energy               -- energy floor
+    -> Exp Energy               -- energy tolerance
+    -> Exp Pressure             -- pressure floor
+    -> Exp Pressure             -- pressure tolerance
+    -> Exp R                    -- viscosity tolerance
+    -> Exp Volume
+    -> Exp Volume
+    -> Exp Energy
+    -> Exp Pressure
+    -> Exp Viscosity
+    -> (Exp Pressure, Exp Energy, Exp R, Exp R)
+calcEOSForElem
+  eosvmin eosvmax rho_ref e_min e_cut p_min p_cut q_cut -- params
+  vol delta_vol e p q =
+  let
+      clamp     = (\x -> if eosvmin /=* 0 then max eosvmin x else x)
+                . (\x -> if eosvmax /=* 0 then min eosvmax x else x)
+
+      vol'      = clamp vol
+
+      work      = 0
+      comp      = 1 / vol' - 1
+      comp'     = 1 / (vol' - delta_vol * 0.5) - 1
+
+      (e', p', q', bvc, pbvc)   = calcEnergyForElem rho_ref e_min e_cut p_min p_cut q_cut e p q comp comp' vol' delta_vol work
+      ss                        = calcSoundSpeedForElem rho_ref vol' e p bvc pbvc
+  in
+  (p', e', q', ss)
+
+
 -- | Calculate pressure and energy for an element
 --
 calcEnergyForElem
