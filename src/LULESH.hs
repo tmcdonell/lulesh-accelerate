@@ -848,25 +848,46 @@ calcElemVelocityGradient v b det =
 -- TODO: Don't allow excessive artificial viscosity. If any q > qstop: exit
 --
 calcQForElems
-    :: Acc (Field Position)
+    :: Exp R                    -- configuration parameters
+    -> Exp R
+    -> Exp R
+    -> Exp R
+    -> Acc (Field Position)
     -> Acc (Field Velocity)
-    -> Acc (Field Viscosity)
     -> Acc (Field Volume)
     -> Acc (Field Volume)
     -> Acc (Field Mass)
     -> Acc (Field R)            -- vdot / v
-    -> ()
-calcQForElems position velocity viscosity relativeVolume referenceVolume mass vdov =
+    -> Acc (Field Viscosity, Field Viscosity)
+calcQForElems
+  q_scale q_limit qlc qqc
+  position velocity relativeVolume referenceVolume mass vdov =
   let
+      numNode           = indexHead (shape position)
+      numElem           = numNode - 1
+      sh                = index3 numElem numElem numElem
+
       -- calculate velocity gradients
-      -- calcMonotonicQGradientsForElem ...
+      (grad_p, grad_v)
+        = A.unzip
+        $ A.generate sh $ \ix ->
+            let
+                p       = collectToElem position ix
+                v       = collectToElem velocity ix
+                volRel  = relativeVolume  ! ix
+                volRef  = referenceVolume ! ix
+            in
+            calcMonotonicQGradientsForElem p v volRel volRef
 
       -- Transfer velocity gradients in the first order elements
-      -- calcMonotonicQForElem
+      (ql, qq)
+        = A.unzip
+        $ calcMonotonicQForElems q_scale q_limit qlc qqc grad_p grad_v relativeVolume referenceVolume mass vdov
 
       -- TODO: don't allow excessive artificial viscosity
+      -- A.maximum q >* qstop --> error
   in
-  ()
+  lift (ql, qq)
 
 
 -- | Calculate discrete spatial gradients of nodal coordinates and velocity
