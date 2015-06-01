@@ -982,3 +982,16 @@ calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volN
   in
   viscosity
 
+-- | Update the relative volume, using a tolerance to prevent spurious
+-- deviations from the initial values (which may arise due to floating point
+-- roundoff error).
+--
+updateVolumeForElem
+    :: Exp Volume
+    -> Exp Volume
+    -> Exp Volume
+updateVolumeForElem vol_cut vol =
+  if abs (vol - 1) <* vol_cut
+     then 1
+     else vol
+
