@@ -982,6 +982,55 @@ calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volN
   in
   viscosity
 
+-- | Calculate pressure and energy for an element
+--
+calcEnergyForElem
+    :: Exp R                    -- reference density
+    -> Exp Energy               -- energy floor
+    -> Exp Energy               -- energy tolerance
+    -> Exp Pressure             -- pressure floor
+    -> Exp Pressure             -- pressure tolerance
+    -> Exp R                    -- viscosity tolerance
+    -> Exp Energy
+    -> Exp Pressure
+    -> Exp Viscosity            -- (qq, ql, q)
+    -> Exp R                    -- compression
+    -> Exp R                    -- half-step compression
+    -> Exp Volume
+    -> Exp Volume
+    -> Exp R                    -- work
+    -> (Exp Energy, Exp Pressure, Exp R, Exp R, Exp R)
+calcEnergyForElem
+  rho_ref e_min e_cut p_min p_cut q_cut                                 -- config
+  e0 p0 (unlift -> V3 qq ql q0) comp comp_half vol vol_delta work =     -- inputs
+  let
+      e1                = e_min `max` (e0 - 0.5 * vol_delta * (p0 + q0) + 0.5 * work)
+      (p1, bvc1, pbvc1) = calcPressureForElem p_min p_cut e1 vol comp_half
+      ssc1              = calcSoundSpeedForElem rho_ref (1/(1+comp_half)) e1 p1 bvc1 pbvc1
+      q1                = vol_delta >* 0 ? (0, ssc1 * ql + qq )
+
+      e2                = let e = e1
+                                + 0.5 * vol_delta * (3.0 * (p0 + q0) - 4.0 * (p1 + q1))
+                                + 0.5 * work
+                          in
+                          abs e <* e_cut ? (0, max e_min e )
+      (p2, bvc2, pbvc2) = calcPressureForElem p_min p_cut e2 vol comp
+      ssc2              = calcSoundSpeedForElem rho_ref vol e2 p2 bvc2 pbvc2
+      q2                = vol_delta >* 0 ? (0, ssc2 * ql + qq)
+
+      e3                = let e = e2 - 1/6 * vol_delta * ( 7.0 * (p0 + q0)
+                                                         - 8.0 * (p1 + q1)
+                                                         +       (p2 + q2) )
+                          in
+                          abs e <* e_cut ? (0, max e_min e)
+      (p3, bvc3, pbvc3) = calcPressureForElem p_min p_cut e3 vol comp
+      ssc3              = calcSoundSpeedForElem rho_ref vol e3 p3 bvc3 pbvc3
+      q3                = let q = ssc3 * ql + qq
+                          in abs q >* q_cut ? (0, q)
+  in
+  (e3, p3, q3, bvc3, pbvc3)
+
+
 -- | Calculate the "gamma law" model of a gas:
 --
 --    P = (gamma - 1) (rho / rho0) e
