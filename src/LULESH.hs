@@ -189,7 +189,7 @@ lagrangeLeapFrog = ()
 lagrangeNodal
     :: Exp R                    -- hourglass coefficient
     -> Exp R                    -- acceleration cutoff
-    -> Exp R                    -- timestep
+    -> Exp Timestep             -- timestep
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Pressure)
@@ -669,14 +669,55 @@ integrate dt
 --   4. Compute updated element volume
 --
 lagrangeElements
-    :: Exp Timestep
+    :: Exp Viscosity            -- viscosity scaling factor
+    -> Exp Viscosity            -- viscosity limiter
+    -> Exp Viscosity            -- scaling for linear component of viscosity
+    -> Exp Viscosity            -- scaling for quadratic part of viscosity
+    -> Exp Volume               -- minimum volume
+    -> Exp Volume               -- maximum volume
+    -> Exp Density              -- reference density
+    -> Exp Energy               -- energy floor
+    -> Exp Energy               -- energy tolerance
+    -> Exp Pressure             -- pressure floor
+    -> Exp Pressure             -- pressure tolerance
+    -> Exp Viscosity            -- viscosity tolerance
+    -> Exp Volume               -- volume tolerance
+    -> Exp Timestep
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Volume)
+    -> Acc (Field Volume)
+    -> Acc (Field Viscosity)
+    -> Acc (Field Energy)
+    -> Acc (Field Pressure)
     -> Acc (Field Mass)
-    -> ()
-lagrangeElements dt position velocity volume elemMass =
-  ()
+    -> Acc (Field Pressure, Field Energy, Field Viscosity, Field Volume, Field R, Field R)
+lagrangeElements
+  q_scale q_limit qlc qqc eosvmin eosvmax rho_ref e_min e_cut p_min p_cut q_cut vol_cut -- params
+  dt position velocity relativeVolume referenceVolume viscosity energy pressure elemMass =
+  let
+      (newVol, deltaVol, vdov, arealg :: Acc (Field R))
+          = unlift
+          $ calcLagrangeElements dt position velocity relativeVolume referenceVolume
+
+      (ql, qq)
+          = unlift
+          $ calcQForElems q_scale q_limit qlc qqc position velocity newVol referenceVolume elemMass vdov
+
+      (p, e, q, ss)
+          = A.unzip4
+          $ A.zipWith7 (calcEOSForElem eosvmin eosvmax rho_ref e_min e_cut p_min p_cut q_cut)
+                       newVol
+                       deltaVol
+                       energy
+                       pressure
+                       viscosity
+                       ql
+                       qq
+
+      vol = A.map (updateVolumeForElem vol_cut) newVol
+  in
+  lift (p, e, q, vol, ss, arealg)
 
 
 -- | Calculate various element quantities that are based on the new kinematic
@@ -690,14 +731,26 @@ calcLagrangeElements
     -> Acc (Field Velocity)     -- nodal velocity
     -> Acc (Field Volume)       -- relative volume
     -> Acc (Field Volume)       -- reference volume
-    -> ()
+    -> Acc (Field Volume, Field Volume, Field R, Field R)
 calcLagrangeElements dt position velocity relativeVolume referenceVolume =
   let
       numNode           = indexHead (shape position)
       numElem           = numNode - 1
       sh                = index3 numElem numElem numElem
+
+      -- calculate new element quantities based on updated position and velocity
+      (volRel, deltaVol, vdov, arealg)
+        = A.unzip4
+        $ A.generate sh $ \ix ->
+            let
+                p       = collectToElem position ix
+                v       = collectToElem velocity ix
+                volRel  = relativeVolume  ! ix
+                volRef  = referenceVolume ! ix
+            in
+            calcKinematicsForElem dt p v volRel volRef
   in
-  ()
+  lift (volRel, deltaVol, vdov, arealg)
 
 
 -- | Calculate terms in the total strain rate tensor epsilon_tot that are used
@@ -952,7 +1005,9 @@ calcMonotonicQForElems
     -> Acc (Field Volume)
     -> Acc (Field R)                            -- vdot / v
     -> Acc (Field (Viscosity, Viscosity))       -- ql, qq
-calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volNew elemMass vdov =
+calcMonotonicQForElems
+  q_scale q_limit qlc qqc
+  grad_x grad_v volNew volRef elemMass vdov =
   let
       sh                = shape grad_x
       numElem           = indexHead sh
@@ -974,10 +1029,10 @@ calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volN
       calcPhi m p =
         let
             phi = 0.5 * (m + p)
-            m'  = m * monoq_scale
-            p'  = p * monoq_scale
+            m'  = m * q_scale
+            p'  = p * q_scale
         in
-        m' `min` phi `min` p' `max` 0 `min` monoq_limit
+        m' `min` phi `min` p' `max` 0 `min` q_limit
 
       -- Calculate linear and quadratic terms for viscosity
       --
@@ -1013,12 +1068,12 @@ calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volN
 calcEOSForElem
     :: Exp Volume               -- minimum volume
     -> Exp Volume               -- maximum volume
-    -> Exp R                    -- reference density
+    -> Exp Density              -- reference density
     -> Exp Energy               -- energy floor
     -> Exp Energy               -- energy tolerance
     -> Exp Pressure             -- pressure floor
     -> Exp Pressure             -- pressure tolerance
-    -> Exp R                    -- viscosity tolerance
+    -> Exp Viscosity            -- viscosity tolerance
     -> Exp Volume
     -> Exp Volume
     -> Exp Energy
@@ -1026,7 +1081,7 @@ calcEOSForElem
     -> Exp Viscosity
     -> Exp Viscosity            -- linear term
     -> Exp Viscosity            -- quadratic term
-    -> (Exp Pressure, Exp Energy, Exp R, Exp R)
+    -> Exp (Pressure, Energy, Viscosity, R)
 calcEOSForElem
   eosvmin eosvmax rho_ref e_min e_cut p_min p_cut q_cut -- params
   vol delta_vol e p q ql qq =
@@ -1043,13 +1098,13 @@ calcEOSForElem
       (e', p', q', bvc, pbvc)   = calcEnergyForElem rho_ref e_min e_cut p_min p_cut q_cut e p q ql qq comp comp' vol' delta_vol work
       ss                        = calcSoundSpeedForElem rho_ref vol' e p bvc pbvc
   in
-  (p', e', q', ss)
+  lift (p', e', q', ss)
 
 
 -- | Calculate pressure and energy for an element
 --
 calcEnergyForElem
-    :: Exp R                    -- reference density
+    :: Exp Density              -- reference density
     -> Exp Energy               -- energy floor
     -> Exp Energy               -- energy tolerance
     -> Exp Pressure             -- pressure floor
@@ -1125,7 +1180,7 @@ calcPressureForElem p_min p_cut e vol comp =
 --    c_sound = (p*e + V^2*p*(gamma-1)*(1/(V-1)+1)) / rho0
 --
 calcSoundSpeedForElem
-    :: Exp R                    -- reference density
+    :: Exp Density              -- reference density
     -> Exp Volume
     -> Exp Energy
     -> Exp Pressure
