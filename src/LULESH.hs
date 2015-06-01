@@ -3,7 +3,18 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
-
+--
+-- This module contains the main implementation of the Livermore Unstructured
+-- Lagrangian Explicit Shock Hydrodynamics (LULESH) mini-app in Accelerate.
+--
+-- NOTES:
+--
+-- Most functions are named similarly to the corresponding function in the
+-- reference C implementation.
+--
+-- I did my best to add comments as I reverse-engineered the C code, but I
+-- apologise that it may be difficult to understand.
+--
 module LULESH where
 
 import Domain
@@ -94,6 +105,9 @@ collectToElem mesh ix@(unlift -> Z :. z :. y :. x)
 -- Given a set of values at the nodes surrounding each element, form a nodal
 -- grid by combining all those elements.
 --
+-- This is used to transform a local scatter operation (from elements to the
+-- surrounding nodes) into a global gather operation.
+--
 distributeToNode
     :: forall a. Elt a
     => (Exp a -> Exp a -> Exp a)
@@ -128,6 +142,11 @@ distributeToNode f zero arr =
   generate sh' mesh
 
 
+-- | Extract one of the six "faces" of a hexahedron.
+--
+-- The numbering of the faces is arbitrary, but the direction the corners trace
+-- out is such that the face normal is towards the inside of the hexahedron.
+--
 collectFace :: Elt a => Int -> Exp (Hexahedron a) -> Exp (Quad a)
 collectFace 0 p = lift (p^._0, p^._1, p^._2, p^._3)
 collectFace 1 p = lift (p^._0, p^._4, p^._5, p^._1)
@@ -911,7 +930,7 @@ calcMonotonicQForElems
     -> Acc (Field Volume)
     -> Acc (Field Volume)
     -> Acc (Field R)                    -- vdot / v
-    -> Acc (Field (R, R))               -- qq, ql
+    -> Acc (Field (R, R))               -- ql, qq
 calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volNew elemMass vdov =
   let
       sh                = shape grad_x
