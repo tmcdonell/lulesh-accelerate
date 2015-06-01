@@ -138,7 +138,6 @@ initDomain Options{..} =
       nfill v   = fromFunction (Z :. numNode :. numNode :. numNode) (const v)
 
       n000      = nfill (V3 0 0 0)
-      e000      = efill (V3 0 0 0)
       e0        = efill 0
   in
   Domain
@@ -153,7 +152,7 @@ initDomain Options{..} =
     -- element centred
   , energy              = initEnergy numElem
   , pressure            = e0
-  , viscosity           = e000
+  , viscosity           = e0
   , volume              = efill 1
   , volume_ref          = ev
   , volume_dov          = e0

@@ -26,7 +26,7 @@ import Data.Array.Accelerate                            as A hiding ( transpose 
 import Data.Array.Accelerate.Linear                     as L hiding ( Epsilon )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
-
+{--
 -- -----------------------------------------------------------------------------
 -- TESTING
 -- -----------------------------------------------------------------------------
@@ -62,10 +62,10 @@ step1 Domain{..}
                       (use ss)
                       (use elemMass)
 
-
 -- -----------------------------------------------------------------------------
 -- END TESTING BLOCK
 -- -----------------------------------------------------------------------------
+--}
 
 -- Utilities
 -- =========
@@ -305,7 +305,7 @@ initStressTermsForElem
     :: Exp Pressure
     -> Exp Viscosity
     -> Exp Sigma
-initStressTermsForElem p (view _z -> q) =
+initStressTermsForElem p q =
   let s = -p - q
   in  lift (V3 s s s)
 
@@ -929,8 +929,8 @@ calcMonotonicQForElems
     -> Acc (Field Mass)
     -> Acc (Field Volume)
     -> Acc (Field Volume)
-    -> Acc (Field R)                    -- vdot / v
-    -> Acc (Field (R, R))               -- ql, qq
+    -> Acc (Field R)                            -- vdot / v
+    -> Acc (Field (Viscosity, Viscosity))       -- ql, qq
 calcMonotonicQForElems monoq_scale monoq_limit qlc qqc grad_x grad_v volRef volNew elemMass vdov =
   let
       sh                = shape grad_x
@@ -1003,10 +1003,12 @@ calcEOSForElem
     -> Exp Energy
     -> Exp Pressure
     -> Exp Viscosity
+    -> Exp Viscosity            -- linear term
+    -> Exp Viscosity            -- quadratic term
     -> (Exp Pressure, Exp Energy, Exp R, Exp R)
 calcEOSForElem
   eosvmin eosvmax rho_ref e_min e_cut p_min p_cut q_cut -- params
-  vol delta_vol e p q =
+  vol delta_vol e p q ql qq =
   let
       clamp     = (\x -> if eosvmin /=* 0 then max eosvmin x else x)
                 . (\x -> if eosvmax /=* 0 then min eosvmax x else x)
@@ -1017,7 +1019,7 @@ calcEOSForElem
       comp      = 1 / vol' - 1
       comp'     = 1 / (vol' - delta_vol * 0.5) - 1
 
-      (e', p', q', bvc, pbvc)   = calcEnergyForElem rho_ref e_min e_cut p_min p_cut q_cut e p q comp comp' vol' delta_vol work
+      (e', p', q', bvc, pbvc)   = calcEnergyForElem rho_ref e_min e_cut p_min p_cut q_cut e p q ql qq comp comp' vol' delta_vol work
       ss                        = calcSoundSpeedForElem rho_ref vol' e p bvc pbvc
   in
   (p', e', q', ss)
@@ -1031,19 +1033,21 @@ calcEnergyForElem
     -> Exp Energy               -- energy tolerance
     -> Exp Pressure             -- pressure floor
     -> Exp Pressure             -- pressure tolerance
-    -> Exp R                    -- viscosity tolerance
+    -> Exp Viscosity            -- viscosity tolerance
     -> Exp Energy
     -> Exp Pressure
-    -> Exp Viscosity            -- (qq, ql, q)
+    -> Exp Viscosity
+    -> Exp Viscosity            -- linear term
+    -> Exp Viscosity            -- quadratic term
     -> Exp R                    -- compression
     -> Exp R                    -- half-step compression
     -> Exp Volume
     -> Exp Volume
     -> Exp R                    -- work
-    -> (Exp Energy, Exp Pressure, Exp R, Exp R, Exp R)
+    -> (Exp Energy, Exp Pressure, Exp Viscosity, Exp R, Exp R)
 calcEnergyForElem
   rho_ref e_min e_cut p_min p_cut q_cut                                 -- config
-  e0 p0 (unlift -> V3 qq ql q0) comp comp_half vol vol_delta work =     -- inputs
+  e0 p0 q0 ql qq comp comp_half vol vol_delta work =     -- inputs
   let
       e1                = e_min `max` (e0 - 0.5 * vol_delta * (p0 + q0) + 0.5 * work)
       (p1, bvc1, pbvc1) = calcPressureForElem p_min p_cut e1 vol comp_half

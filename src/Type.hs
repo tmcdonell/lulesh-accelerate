@@ -28,7 +28,7 @@ type Mass               = R             -- nodal mass (old: nodalMass)
 type Pressure           = R             -- pressure (old: p)
 type Energy             = R             -- internal energy (old: e)
 type Volume             = R             -- relative volume (old: v)
-type Viscosity          = V3 R          -- artificial viscosity (old: qq, ql, q)
+type Viscosity          = R
 type Epsilon            = V3 R          -- diagonal terms of deviatoric strain (old: dxx, dyy, dzz)
 
 -- Other useful type synonyms
