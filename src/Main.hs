@@ -41,9 +41,9 @@ main = do
   (opts,_)      <- parseArgs
 
   let
---      run               = B.run  (opts ^. optBackend)
-      numElem           = opts ^. optSize
-      numNode           = numElem + 1
+--      run       = B.run  (opts ^. optBackend)
+      numElem   = opts ^. optSize
+      numNode   = numElem + 1
 
       -- We don't have loop-invariant code motion. This forces 'x' to be
       -- evaluated before applying it in 'f'
