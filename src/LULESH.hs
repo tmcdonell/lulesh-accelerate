@@ -1138,10 +1138,10 @@ calcTimeConstraints param ss vdov arealg =
   (dt_courant, dt_hydro)
 
 
--- | The Courant timestep constraint is calculated only in elements whose
--- volumes are changing (vdov /= 0). This constraint is essentially the ratio of
--- the characteristic length of the element to the speed of sound in that
--- element. However, when the element is under compression (vdov < 0),
+-- | The Courant-Friedrichs-Lewy (CFL) constraint is calculated only in elements
+-- whose volumes are changing (vdov /= 0). This constraint is essentially the
+-- ratio of the characteristic length of the element to the speed of sound in
+-- that element. However, when the element is under compression (vdov < 0),
 -- additional terms are added to the denominator to reduce the timestep further.
 --
 calcCourantConstraintForElem

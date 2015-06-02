@@ -73,7 +73,8 @@ initElemVolume numElem =
 -- | Initialise the mass at each node. This is the average of the contribution
 -- of each of the surrounding elements.
 --
--- Again, since we begin with a regular mesh, we just compute this value directly.
+-- Again, since we begin with a regular mesh, we just compute this value
+-- directly, but we could equivalently read from the array of element volumes.
 --
 initNodeMass :: Int -> Acc (Field Mass)
 initNodeMass numElem =
