@@ -3,83 +3,9 @@
 module Domain where
 
 import Type
-import Options
 
 import Prelude                                  as P
 import Data.Array.Accelerate                    as A
-import Data.Array.Accelerate.Linear             hiding ( Epsilon )
-
-
--- The domain is the primary data structure for LULESH.
---
--- A mesh is partitioned into a logically rectangular collection called the
--- Domain. All data for variables represented by this portion of the mesh are
--- contained within the Domain data structure. Note that nodes on domain
--- boundaries are shared by neighbouring domains.
---
--- Thus, we have a three level hierarchy for computation: the problem level;
--- which is the union of all domains (i.e., the whole mesh); the domain level;
--- and the element level. The problem may contain one or more domains, and a
--- domain may contain one or more elements. This allows for flexible scalability
--- from a single element problem to a very large problem with an arbitrary
--- number of elements, where the computation is defined over the same physical
--- volume of space.
---
-data Domain = Domain
-  {
-    -- Node centred
-    -- ------------
-    mesh                :: Field Position               -- (x, y, z)
-  , velocity            :: Field Velocity               -- (xd, yd, zd)
-  , acceleration        :: Field Acceleration           -- (xdd, ydd, zdd)
-  , force               :: Field Force                  -- (fx, fy, fz)
-  , nodeMass            :: Field Mass
-
---  , symmetry            :: Vector (I,I,I)             -- symmetry plane nodesets
-
-    -- Element centred
-    -- ---------------
---  , numReg              :: ?? I
---  , cost                :: ?? I                    -- imbalance cost
---  , regElemSize         :: ?? [I]                  -- size of region sets
---  , regNumList          :: ?? [I]                  -- region number per domain element
---  , regElemList         :: ?? [Acc (Vector I)]     -- region index set
-
--- , nodeList           :: ??                     -- element to node connectivity
---
---   ... element connectivity across each face
---   ... symmetric/free surface flags for each element face
-
-  , energy              :: Field Energy                 -- e
-  , pressure            :: Field Pressure               -- p
-  , viscosity           :: Field Viscosity              -- (qq, ql, q)
-  , strains             :: Field Epsilon                -- principal strains (dxx, dyy, dzz)
-
---  , viscosity           :: Array DIM3 R         -- q
---  , viscosity_linear    :: Vector R             -- ql
---  , viscosity_quadratic :: Vector R             -- qq
-    -- TLM: viscosity = qq^2 + ql + q ??
-
-  , volume              :: Field Volume         -- v (relative)
-  , volume_ref          :: Field Volume         -- volo (reference volume)
-  , volume_dov          :: Array DIM3 R         -- volume derivative over volume
-
-  , arealg              :: Array DIM3 R         -- characteristic length of an element
-
-    -- Courant-Friedrichs-Lewy (CFL) condition determines the maximum size of
-    -- each time increment based on the shortest distance across any mesh
-    -- element, and the speed of sound in the material of that element.
-  , ss                  :: Array DIM3 R         -- "speed of sound"
-
-  , elemMass            :: Array DIM3 R         -- mass
-
-    -- Simulation variables
-    -- --------------------
-  , iteration           :: Int                  -- simulation iteration
-  , time                :: R                    -- current simulation time
-  , dt                  :: R                    -- variable time increment
-  }
-  deriving Show
 
 
 data Parameters = Parameters
@@ -114,47 +40,6 @@ data Parameters = Parameters
   }
   deriving Show
 
-
--- Initialise a domain with the starting configuration
---
-initDomain :: Options -> Domain
-initDomain Options{..} =
-  let
-      numElem   = optSize
-      numNode   = numElem + 1
-
-      ev        = initElemVolume numElem
-      efill v   = fromFunction (Z :. numElem :. numElem :. numElem) (const v)
-      nfill v   = fromFunction (Z :. numNode :. numNode :. numNode) (const v)
-
-      n000      = nfill (V3 0 0 0)
-      e0        = efill 0
-  in
-  Domain
-  {
-    -- node centred
-    mesh                = initMesh numElem
-  , velocity            = n000
-  , acceleration        = n000
-  , force               = n000
-  , nodeMass            = initNodeMass numElem
-
-    -- element centred
-  , energy              = initEnergy numElem
-  , pressure            = e0
-  , viscosity           = e0
-  , volume              = efill 1
-  , volume_ref          = ev
-  , volume_dov          = e0
-  , arealg              = e0
-  , ss                  = e0
-  , elemMass            = ev
-
-    -- simulation parameters
-  , iteration           = 0
-  , time                = 0
-  , dt                  = 1.0e-7
-  }
 
 parameters :: Parameters
 parameters = Parameters
