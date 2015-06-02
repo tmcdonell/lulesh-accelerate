@@ -18,12 +18,24 @@ import Data.Array.Accelerate            as A
 --
 timeIncrement
     :: Parameters
-    -> Exp R                    -- current simulation time
-    -> Exp Timestep             -- old timestep
-    -> Exp Timestep
-    -> Exp Timestep
-    -> Exp Timestep
-timeIncrement Parameters{..} t_now dt_old dt_courant dt_hydro =
+    -> Acc (Scalar Time)
+    -> Acc (Scalar Time)
+    -> Acc (Scalar Time)
+    -> Acc (Scalar Time)
+    -> (Acc (Scalar Time), Acc (Scalar Time))
+timeIncrement param t dt dtc dth
+  = A.unzip
+  $ A.zipWith4 (timeIncrement' param) t dt dtc dth
+
+
+timeIncrement'
+    :: Parameters
+    -> Exp Time                 -- current simulation time
+    -> Exp Time                 -- old timestep
+    -> Exp Time
+    -> Exp Time
+    -> Exp (Time, Time)         -- (simulation time, timestep)
+timeIncrement' Parameters{..} t_now dt_old dt_courant dt_hydro =
   let
       dt_end    = t_end - t_now
       (lb,ub)   = dt_scaling
@@ -46,6 +58,10 @@ timeIncrement Parameters{..} t_now dt_old dt_courant dt_hydro =
                 , (\r -> r >=* 1 &&* r >* ub, dt_old * ub)
                 ]
                 c3
+
+      -- compute timestep and the new simulation time
+      dt'       = min step target
+      t_now'    = t_now + dt'
   in
-  min step target
+  lift (t_now', dt')
 

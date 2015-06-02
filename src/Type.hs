@@ -35,7 +35,7 @@ type Density            = R
 -- Other useful type synonyms
 type Normal             = V3 R          -- normal vector
 type Sigma              = V3 R          -- stress term
-type Timestep           = R
+type Time               = R
 
 
 -- Node numbering in LULESH is zero-based. Rename the one-based tuple accessors

@@ -27,46 +27,6 @@ import Data.Array.Accelerate                            as A hiding ( transpose 
 import Data.Array.Accelerate.Linear                     as L hiding ( Epsilon )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
-{--
--- -----------------------------------------------------------------------------
--- TESTING
--- -----------------------------------------------------------------------------
-
-import Data.Array.Accelerate.Interpreter                as I
-
-domain :: Domain
-domain = initDomain defaultOpts
-
-elemNodes :: Acc (Field (Hexahedron Position))
-elemNodes =
-  let m                 = A.use (mesh domain)
-      Z :. z :. y :. x  = unlift (shape m)
-      sh                = index3 (z-1) (y-1) (x-1)
-  in
-  A.generate sh (collectToElem m)
-
--- stress :: Acc (Field Sigma)
--- stress =
---   initStressTermsForElems (A.use $ pressure domain)
---                           (A.use $ viscosity domain)
-
-
-step1 :: Domain -> Acc (Field Force)
-step1 Domain{..}
-  = calcForceForNodes (constant hgcoef)
-                      (use mesh)
-                      (use velocity)
-                      (use pressure)
-                      (use viscosity)
-                      (use volume)
-                      (use volume_ref)
-                      (use ss)
-                      (use elemMass)
-
--- -----------------------------------------------------------------------------
--- END TESTING BLOCK
--- -----------------------------------------------------------------------------
---}
 
 -- Lagrange Leapfrog Algorithm
 -- ===========================
@@ -80,7 +40,7 @@ step1 Domain{..}
 --
 lagrangeLeapFrog
     :: Parameters
-    -> Exp Timestep
+    -> Exp Time
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Energy)
@@ -98,8 +58,8 @@ lagrangeLeapFrog
        , Acc (Field Viscosity)
        , Acc (Field Volume)
        , Acc (Field R)
-       , Acc (Scalar Timestep)
-       , Acc (Scalar Timestep) )
+       , Acc (Scalar Time)
+       , Acc (Scalar Time) )
 lagrangeLeapFrog param dt x dx e p q v v0 ss mZ mN =
   let
       -- Calculate nodal quantities
@@ -131,7 +91,7 @@ lagrangeLeapFrog param dt x dx e p q v v0 ss mZ mN =
 --
 lagrangeNodal
     :: Parameters
-    -> Exp Timestep             -- timestep
+    -> Exp Time
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Pressure)
@@ -569,7 +529,7 @@ applyAccelerationBoundaryConditionsForNodes acc =
 --
 calcVelocityForNodes
     :: Parameters
-    -> Exp Timestep
+    -> Exp Time
     -> Acc (Field Velocity)
     -> Acc (Field Acceleration)
     -> Acc (Field Velocity)
@@ -580,7 +540,7 @@ calcVelocityForNodes Parameters{..} dt u ud
 -- | Integrate the velocity at each node to advance the position of the node
 --
 calcPositionForNodes
-    :: Exp Timestep
+    :: Exp Time
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Position)
@@ -590,7 +550,7 @@ calcPositionForNodes = integrate
 -- | Euler integration
 --
 integrate
-    :: Exp Timestep
+    :: Exp Time
     -> Acc (Field (V3 R))
     -> Acc (Field (V3 R))
     -> Acc (Field (V3 R))
@@ -613,7 +573,7 @@ integrate dt
 --
 lagrangeElements
     :: Parameters
-    -> Exp Timestep
+    -> Exp Time
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Volume)
@@ -652,7 +612,7 @@ lagrangeElements params dt position velocity relativeVolume referenceVolume visc
 -- TODO: Check for negative element volume
 --
 calcLagrangeElements
-    :: Exp Timestep
+    :: Exp Time
     -> Acc (Field Position)     -- nodal position
     -> Acc (Field Velocity)     -- nodal velocity
     -> Acc (Field Volume)       -- relative volume
@@ -686,7 +646,7 @@ calcLagrangeElements dt position velocity relativeVolume referenceVolume =
 -- to compute the terms in the deviatoric strain rate tensor epsilon.
 --
 calcKinematicsForElem
-    :: Exp Timestep
+    :: Exp Time
     -> Exp (Hexahedron Position)
     -> Exp (Hexahedron Velocity)
     -> Exp Volume
@@ -1128,8 +1088,8 @@ calcTimeConstraints
     -> Acc (Field R)
     -> Acc (Field R)
     -> Acc (Field R)
-    -> ( Acc (Scalar Timestep)
-       , Acc (Scalar Timestep) )
+    -> ( Acc (Scalar Time)
+       , Acc (Scalar Time) )
 calcTimeConstraints param ss vdov arealg =
   let
       dt_courant        = A.minimum $ A.zipWith3 (calcCourantConstraintForElem param) ss vdov arealg
@@ -1149,7 +1109,7 @@ calcCourantConstraintForElem
     -> Exp R            -- sound speed
     -> Exp R            -- vdot / v
     -> Exp R            -- characteristic length
-    -> Exp Timestep
+    -> Exp Time
 calcCourantConstraintForElem Parameters{..} ss vdov arealg =
   if vdov ==* 0
      then 1.0e20
@@ -1170,7 +1130,7 @@ calcCourantConstraintForElem Parameters{..} ss vdov arealg =
 calcHydroConstraintForElem
     :: Parameters
     -> Exp R            -- vdot / v
-    -> Exp Timestep
+    -> Exp Time
 calcHydroConstraintForElem Parameters{..} vdov =
   if vdov ==* 0
      then 1.0e20
