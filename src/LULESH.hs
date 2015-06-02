@@ -70,7 +70,6 @@ step1 Domain{..}
 -- Utilities
 -- =========
 
-
 -- Use rebindable syntax to improve readability of branches in scalar code.
 --
 ifThenElse :: Elt t => Exp Bool -> Exp t -> Exp t -> Exp t
@@ -1170,6 +1169,30 @@ updateVolumeForElem Parameters{..} vol =
   if abs (vol - 1) <* v_cut
      then 1
      else vol
+
+
+-- Time Constraints
+-- ================
+
+-- | After all the solution variables are moved to the next time step, the
+-- constrains for next time increment are calculated. Each constraint is
+-- computed in each element, and the final constraint is the minimum over all
+-- element values.
+--
+calcTimeConstraintsForElems
+    :: Parameters
+    -> Acc (Field R)
+    -> Acc (Field R)
+    -> Acc (Field R)
+    -> ( Acc (Scalar Timestep)
+       , Acc (Scalar Timestep) )
+calcTimeConstraintsForElems param ss vdov arealg =
+  let
+      dt_courant        = A.minimum $ A.zipWith3 (calcCourantConstraintForElem param) ss vdov arealg
+      dt_hydro          = A.minimum $ A.map (calcHydroConstraintForElem param) vdov
+  in
+  (dt_courant, dt_hydro)
+
 
 -- | The Courant timestep constraint is calculated only in elements whose
 -- volumes are changing (vdov /= 0). This constraint is essentially the ratio of
