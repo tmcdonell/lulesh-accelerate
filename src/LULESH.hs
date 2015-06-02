@@ -166,11 +166,43 @@ collectFace _ _ = error "collectFace: there are only six faces on a hexahedron"
 --   1. Advance variables on the nodal mesh; and
 --   2. Advance the element variables
 --
-lagrangeLeapFrog :: ()
-lagrangeLeapFrog = ()
-  -- lagrangeNodal
-  -- lagrangeElements
-  -- calcTimeConstraintsForElems
+lagrangeLeapFrog
+    :: Parameters
+    -> Exp Timestep
+    -> Acc (Field Position)
+    -> Acc (Field Velocity)
+    -> Acc (Field Energy)
+    -> Acc (Field Pressure)
+    -> Acc (Field Viscosity)
+    -> Acc (Field Volume)       -- relative volume
+    -> Acc (Field Volume)       -- reference volume
+    -> Acc (Field R)            -- speed of sound
+    -> Acc (Field Mass)         -- element mass
+    -> Acc (Field Mass)         -- nodal mass
+    -> ( Acc (Field Position)
+       , Acc (Field Velocity)
+       , Acc (Field Energy)
+       , Acc (Field Pressure)
+       , Acc (Field Viscosity)
+       , Acc (Field Volume)
+       , Acc (Field R)
+       , Acc (Scalar Timestep)
+       , Acc (Scalar Timestep) )
+lagrangeLeapFrog param dt x dx e p q v v0 ss mZ mN =
+  let
+      -- Calculate nodal forces
+      (x', dx')
+          = lagrangeNodal param dt x dx p q v v0 ss mZ mN
+
+      -- Calculate element quantities
+      (p', e', q', v', ss', vdov, arealg)
+          = lagrangeElements param dt x' dx' v v0 q e p mZ
+
+      -- Calculate timestep constraints
+      (dtc, dth)
+          = calcTimeConstraintsForElems param ss' vdov arealg
+  in
+  (x', dx', e', p', q', v', ss', dtc, dth)
 
 
 -- Advance Node Quantities
@@ -186,8 +218,7 @@ lagrangeLeapFrog = ()
 --   5. Integrate nodal velocities to obtain updated positions: 'calcPositionForNodes'
 --
 lagrangeNodal
-    :: Exp R                    -- hourglass coefficient
-    -> Exp R                    -- acceleration cutoff
+    :: Parameters
     -> Exp Timestep             -- timestep
     -> Acc (Field Position)
     -> Acc (Field Velocity)
@@ -200,13 +231,13 @@ lagrangeNodal
     -> Acc (Field Mass)         -- nodal mass
     -> ( Acc (Field Position)
        , Acc (Field Velocity) )
-lagrangeNodal hgcoef ucut dt position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass nodalMass =
+lagrangeNodal param dt position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass nodalMass =
   let
       -- Time of boundary condition evaluation is beginning of step for force
       -- and acceleration boundary conditions
-      force             = calcForceForNodes hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
+      force             = calcForceForNodes param position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
       acceleration      = calcAccelerationForNodes force nodalMass
-      velocity'         = calcVelocityForNodes dt ucut velocity acceleration
+      velocity'         = calcVelocityForNodes param dt velocity acceleration
       position'         = calcPositionForNodes dt position velocity'
   in
   (position', velocity')
@@ -219,19 +250,19 @@ lagrangeNodal hgcoef ucut dt position velocity pressure viscosity volumeRel volu
 -- then distributed to the surrounding nodes.
 --
 calcForceForNodes
-    :: Exp R
+    :: Parameters
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Pressure)
     -> Acc (Field Viscosity)
     -> Acc (Field Volume)       -- volume
     -> Acc (Field Volume)       -- reference valume
-    -> Acc (Field R)
+    -> Acc (Field R)            -- sound speed
     -> Acc (Field Mass)
     -> Acc (Field Force)
-calcForceForNodes hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
+calcForceForNodes param position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
   = distributeToNode (+) 0
-  $ calcVolumeForceForElems hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
+  $ calcVolumeForceForElems param position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
 
 
 -- | Calculate the volume force contribute for each hexahedral mesh element. The
@@ -242,7 +273,7 @@ calcForceForNodes hgcoef position velocity pressure viscosity volumeRel volumeRe
 --  3. Calculate the hourglass control contribution for each element.
 --
 calcVolumeForceForElems
-    :: Exp R
+    :: Parameters
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Pressure)
@@ -252,7 +283,7 @@ calcVolumeForceForElems
     -> Acc (Field R)
     -> Acc (Field Mass)
     -> Acc (Field (Hexahedron Force))
-calcVolumeForceForElems hgcoef position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass =
+calcVolumeForceForElems Parameters{..} position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass =
   let
       numNode           = indexHead (shape position)
       numElem           = numNode - 1
@@ -625,13 +656,13 @@ applyAccelerationBoundaryConditionsForNodes acc =
 -- zero.
 --
 calcVelocityForNodes
-    :: Exp Timestep
-    -> Exp Energy                       -- cutoff energy
+    :: Parameters
+    -> Exp Timestep
     -> Acc (Field Velocity)
     -> Acc (Field Acceleration)
     -> Acc (Field Velocity)
-calcVelocityForNodes dt ucut u ud
-  = A.map (over each (\x -> abs x <* ucut ? (0,x)))
+calcVelocityForNodes Parameters{..} dt u ud
+  = A.map (over each (\x -> abs x <* u_cut ? (0,x)))
   $ integrate dt u ud
 
 -- | Integrate the velocity at each node to advance the position of the node
@@ -684,10 +715,11 @@ lagrangeElements
        , Acc (Field Viscosity)
        , Acc (Field Volume)
        , Acc (Field R)
+       , Acc (Field R)
        , Acc (Field R) )
 lagrangeElements params dt position velocity relativeVolume referenceVolume viscosity energy pressure elemMass =
   let
-      (newVol, deltaVol, vdov, arealg :: Acc (Field R))
+      (newVol, deltaVol, vdov, arealg)
           = calcLagrangeElements dt position velocity relativeVolume referenceVolume
 
       (ql, qq)
@@ -699,7 +731,7 @@ lagrangeElements params dt position velocity relativeVolume referenceVolume visc
 
       vol = A.map (updateVolumeForElem params) newVol
   in
-  (p, e, q, vol, ss, arealg)
+  (p, e, q, vol, ss, vdov, arealg)
 
 
 -- | Calculate various element quantities that are based on the new kinematic
