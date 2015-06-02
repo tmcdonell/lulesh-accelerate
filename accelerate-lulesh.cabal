@@ -54,6 +54,7 @@ Executable accelerate-lulesh
   build-depends:
       base                      >= 4.6
     , accelerate                >= 0.15
+    , ansi-wl-pprint            >= 0.6
     , lens-accelerate           >= 0.1
     , linear-accelerate         >= 0.3
 
