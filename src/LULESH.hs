@@ -1171,6 +1171,30 @@ updateVolumeForElem Parameters{..} vol =
      then 1
      else vol
 
+-- | The Courant timestep constraint is calculated only in elements whose
+-- volumes are changing (vdov /= 0). This constraint is essentially the ratio of
+-- the characteristic length of the element to the speed of sound in that
+-- element. However, when the element is under compression (vdov < 0),
+-- additional terms are added to the denominator to reduce the timestep further.
+--
+calcCourantConstraintForElem
+    :: Parameters
+    -> Exp R            -- sound speed
+    -> Exp R            -- vdot / v
+    -> Exp R            -- characteristic length
+    -> Exp Timestep
+calcCourantConstraintForElem Parameters{..} ss vdov arealg =
+  if vdov ==* 0
+     then 1.0e20
+     else let
+              qqc'      = 64 * qqc * qqc
+              dtf       = ss * ss
+                        + if vdov >* 0 then 0
+                                       else qqc' * arealg * arealg * vdov * vdov
+          in
+          arealg / sqrt dtf
+
+
 -- | Calculate the hydro time constraint in elements whose volumes are changing
 -- (vdov /= 0). When the element is undergoing volume change, the timestep for
 -- that element is some maximum allowable element volume change (prescribed)
