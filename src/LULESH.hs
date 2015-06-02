@@ -199,7 +199,8 @@ lagrangeNodal
     -> Acc (Field R)            -- speed of sound
     -> Acc (Field Mass)         -- element mass
     -> Acc (Field Mass)         -- nodal mass
-    -> ( Acc (Field Position), Acc (Field Velocity) )
+    -> ( Acc (Field Position)
+       , Acc (Field Velocity) )
 lagrangeNodal hgcoef ucut dt position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass nodalMass =
   let
       -- Time of boundary condition evaluation is beginning of step for force
@@ -915,8 +916,7 @@ calcQForElems params position velocity relativeVolume referenceVolume mass vdov 
 
       -- Transfer velocity gradients in the first order elements
       (ql, qq)
-        = A.unzip
-        $ calcMonotonicQForElems params grad_p grad_v relativeVolume referenceVolume mass vdov
+        = calcMonotonicQForElems params grad_p grad_v relativeVolume referenceVolume mass vdov
 
       -- TODO: don't allow excessive artificial viscosity
       -- A.maximum q >* qstop --> error
@@ -981,8 +981,9 @@ calcMonotonicQForElems
     -> Acc (Field Mass)
     -> Acc (Field Volume)
     -> Acc (Field Volume)
-    -> Acc (Field R)                            -- vdot / v
-    -> Acc (Field (Viscosity, Viscosity))       -- ql, qq
+    -> Acc (Field R)                    -- vdot / v
+    -> ( Acc (Field Viscosity)          -- ql
+       , Acc (Field Viscosity) )        -- qq
 calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov =
   let
       sh                = shape grad_x
@@ -1032,7 +1033,7 @@ calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov 
            then constant (0,0)
            else lift (qlin, qquad)
   in
-  viscosity
+  A.unzip viscosity
 
 
 -- | Evaluate the Equation of State of the system to calculate the updated
