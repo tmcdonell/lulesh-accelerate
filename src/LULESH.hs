@@ -1171,3 +1171,17 @@ updateVolumeForElem Parameters{..} vol =
      then 1
      else vol
 
+-- | Calculate the hydro time constraint in elements whose volumes are changing
+-- (vdov /= 0). When the element is undergoing volume change, the timestep for
+-- that element is some maximum allowable element volume change (prescribed)
+-- divided by vdov in the element
+--
+calcHydroConstraintForElem
+    :: Parameters
+    -> Exp R            -- vdot / v
+    -> Exp Timestep
+calcHydroConstraintForElem Parameters{..} vdov =
+  if vdov ==* 0
+     then 1.0e20
+     else dvovmax / (abs vdov + 1.0e-20)
+
