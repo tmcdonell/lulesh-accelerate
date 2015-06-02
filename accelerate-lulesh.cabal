@@ -30,6 +30,7 @@ executable accelerate-lulesh
   main-is:              Main.hs
   other-modules:        LULESH
                         Domain
+                        Init
                         Util
 
   hs-source-dirs:       src

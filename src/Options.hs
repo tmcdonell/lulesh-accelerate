@@ -1,6 +1,7 @@
 
 module Options where
 
+
 data Options = Options
   {
     optMaxSteps         :: Int                  -- maximum number of cycles to run
@@ -14,8 +15,19 @@ data Options = Options
   }
   deriving (Eq, Show)
 
-defaultOpts :: Options
-defaultOpts = Options
+
+-- The size of the simulation box
+--
+_WIDTH, _HEIGHT, _DEPTH :: Fractional a => a
+_WIDTH  = 1.125
+_HEIGHT = 1.125
+_DEPTH  = 1.125
+
+
+-- Default simulation options
+--
+options :: Options
+options = Options
   {
     optMaxSteps         = 9999999
   , optSize             = 30
@@ -28,5 +40,5 @@ defaultOpts = Options
   }
 
 parseOptions :: [String] -> Options
-parseOptions _ = defaultOpts
+parseOptions _ = options
 
