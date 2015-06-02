@@ -190,7 +190,7 @@ lagrangeLeapFrog
        , Acc (Scalar Timestep) )
 lagrangeLeapFrog param dt x dx e p q v v0 ss mZ mN =
   let
-      -- Calculate nodal forces
+      -- Calculate nodal quantities
       (x', dx')
           = lagrangeNodal param dt x dx p q v v0 ss mZ mN
 
@@ -200,7 +200,7 @@ lagrangeLeapFrog param dt x dx e p q v v0 ss mZ mN =
 
       -- Calculate timestep constraints
       (dtc, dth)
-          = calcTimeConstraintsForElems param ss' vdov arealg
+          = calcTimeConstraints param ss' vdov arealg
   in
   (x', dx', e', p', q', v', ss', dtc, dth)
 
@@ -1211,17 +1211,17 @@ updateVolumeForElem Parameters{..} vol =
 -- computed in each element, and the final constraint is the minimum over all
 -- element values.
 --
-calcTimeConstraintsForElems
+calcTimeConstraints
     :: Parameters
     -> Acc (Field R)
     -> Acc (Field R)
     -> Acc (Field R)
     -> ( Acc (Scalar Timestep)
        , Acc (Scalar Timestep) )
-calcTimeConstraintsForElems param ss vdov arealg =
+calcTimeConstraints param ss vdov arealg =
   let
       dt_courant        = A.minimum $ A.zipWith3 (calcCourantConstraintForElem param) ss vdov arealg
-      dt_hydro          = A.minimum $ A.map (calcHydroConstraintForElem param) vdov
+      dt_hydro          = A.minimum $ A.map      (calcHydroConstraintForElem   param) vdov
   in
   (dt_courant, dt_hydro)
 
