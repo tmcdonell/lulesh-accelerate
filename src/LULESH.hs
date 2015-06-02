@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 --
 -- This module contains the main implementation of the Livermore Unstructured
 -- Lagrangian Explicit Shock Hydrodynamics (LULESH) mini-app in Accelerate.
@@ -18,7 +19,6 @@
 module LULESH where
 
 import Domain
-import Options
 import Type
 
 import Prelude                                          as P hiding ( (<*) )
@@ -779,7 +779,7 @@ calcKinematicsForElem dt p v volRelOld vol0 =
 
       -- calculate the deviatoric strain rate tensor
       vdov      = P.sum (unlift d :: V3 (Exp R))        -- no foldable instance for (Exp V3) ):
-      strain    = d ^- (vdov / 3.0)
+      _strain   = d ^- (vdov / 3.0)
   in
   lift (volRel, deltaVol, vdov, arealg)
 
@@ -983,7 +983,7 @@ calcMonotonicQForElems
     -> Acc (Field Volume)
     -> Acc (Field R)                            -- vdot / v
     -> Acc (Field (Viscosity, Viscosity))       -- ql, qq
-calcMonotonicQForElems param@Parameters{..} grad_x grad_v volNew volRef elemMass vdov =
+calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov =
   let
       sh                = shape grad_x
       numElem           = indexHead sh
