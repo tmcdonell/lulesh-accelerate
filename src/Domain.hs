@@ -91,20 +91,15 @@ data Domain = Domain
     -- --------------------
   , iteration           :: Int                  -- simulation iteration
   , time                :: R                    -- current simulation time
-  , time_end            :: R                    -- simulation stop time
   , dt                  :: R                    -- variable time increment
-  , dt_scaling          :: (R,R)                -- lower and upper bounds to scale dt by
-  , dt_max              :: R                    -- maximum allowable time increment
-  , dt_courant          :: R                    -- courant constraint
-  , dt_hydro            :: R                    -- volume change constraint
   }
   deriving Show
 
 
 data Parameters = Parameters
   {
-    -- Cutoffs
-    -- -------
+    -- Simulation constants
+    -- --------------------
     e_cut               :: Exp R                -- energy tolerance
   , p_cut               :: Exp R                -- pressure tolerance
   , q_cut               :: Exp R                -- viscosity tolerance
@@ -112,6 +107,10 @@ data Parameters = Parameters
   , u_cut               :: Exp R                -- velocity tolerance
   , p_min               :: Exp R                -- pressure floor
   , e_min               :: Exp R                -- energy floor
+
+  , dt_scaling          :: (Exp R, Exp R)
+  , dt_max              :: Exp R                -- maximum allowable time increment
+  , t_end               :: Exp R                -- end time of the simulation
 
     -- Other constants
     -- ---------------
@@ -168,12 +167,7 @@ initDomain Options{..} =
     -- simulation parameters
   , iteration           = 0
   , time                = 0
-  , time_end            = 1.0e-2
   , dt                  = 1.0e-7
-  , dt_scaling          = (1.1, 1.2)
-  , dt_max              = 1.0e-2
-  , dt_courant          = 1.0e20
-  , dt_hydro            = 1.0e20
   }
 
 parameters :: Parameters
@@ -186,6 +180,10 @@ parameters = Parameters
   , v_cut               = 1.0e-7
   , p_min               = 0
   , e_min               = -1.0e15
+
+  , dt_scaling          = (1.1, 1.2)
+  , dt_max              = 1.0e-2
+  , t_end               = 1.0e-2
 
   , hgcoef              = 3.0
   , qstop               = 1.0e12
