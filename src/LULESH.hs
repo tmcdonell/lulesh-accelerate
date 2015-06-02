@@ -679,16 +679,19 @@ lagrangeElements
     -> Acc (Field Energy)
     -> Acc (Field Pressure)
     -> Acc (Field Mass)
-    -> Acc (Field Pressure, Field Energy, Field Viscosity, Field Volume, Field R, Field R)
+    -> ( Acc (Field Pressure)
+       , Acc (Field Energy)
+       , Acc (Field Viscosity)
+       , Acc (Field Volume)
+       , Acc (Field R)
+       , Acc (Field R) )
 lagrangeElements params dt position velocity relativeVolume referenceVolume viscosity energy pressure elemMass =
   let
       (newVol, deltaVol, vdov, arealg :: Acc (Field R))
-          = unlift
-          $ calcLagrangeElements dt position velocity relativeVolume referenceVolume
+          = calcLagrangeElements dt position velocity relativeVolume referenceVolume
 
       (ql, qq)
-          = unlift
-          $ calcQForElems params position velocity newVol referenceVolume elemMass vdov
+          = calcQForElems params position velocity newVol referenceVolume elemMass vdov
 
       (p, e, q, ss)
           = A.unzip4
@@ -696,7 +699,7 @@ lagrangeElements params dt position velocity relativeVolume referenceVolume visc
 
       vol = A.map (updateVolumeForElem params) newVol
   in
-  lift (p, e, q, vol, ss, arealg)
+  (p, e, q, vol, ss, arealg)
 
 
 -- | Calculate various element quantities that are based on the new kinematic
@@ -710,7 +713,10 @@ calcLagrangeElements
     -> Acc (Field Velocity)     -- nodal velocity
     -> Acc (Field Volume)       -- relative volume
     -> Acc (Field Volume)       -- reference volume
-    -> Acc (Field Volume, Field Volume, Field R, Field R)
+    -> ( Acc (Field Volume)
+       , Acc (Field Volume)
+       , Acc (Field R)
+       , Acc (Field R) )
 calcLagrangeElements dt position velocity relativeVolume referenceVolume =
   let
       numNode           = indexHead (shape position)
@@ -729,7 +735,7 @@ calcLagrangeElements dt position velocity relativeVolume referenceVolume =
             in
             calcKinematicsForElem dt p v vol vol0
   in
-  lift (volRel, deltaVol, vdov, arealg)
+  (volRel, deltaVol, vdov, arealg)
 
 
 -- | Calculate terms in the total strain rate tensor epsilon_tot that are used
@@ -887,7 +893,8 @@ calcQForElems
     -> Acc (Field Volume)
     -> Acc (Field Mass)
     -> Acc (Field R)            -- vdot / v
-    -> Acc (Field Viscosity, Field Viscosity)
+    -> ( Acc (Field Viscosity)
+       , Acc (Field Viscosity) )
 calcQForElems params position velocity relativeVolume referenceVolume mass vdov =
   let
       numNode           = indexHead (shape position)
@@ -914,7 +921,7 @@ calcQForElems params position velocity relativeVolume referenceVolume mass vdov 
       -- TODO: don't allow excessive artificial viscosity
       -- A.maximum q >* qstop --> error
   in
-  lift (ql, qq)
+  (ql, qq)
 
 
 -- | Calculate discrete spatial gradients of nodal coordinates and velocity
