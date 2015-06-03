@@ -1004,7 +1004,7 @@ calcEnergyForElem params@Parameters{..} e0 p0 q0 ql qq comp comp_half vol vol_de
       (p3, bvc3, pbvc3) = calcPressureForElem params e3 vol comp
       ssc3              = calcSoundSpeedForElem params vol e3 p3 bvc3 pbvc3
       q3                = let q = ssc3 * ql + qq
-                          in abs q >* q_cut ? (0, q)
+                          in abs q <* q_cut ? (0, q)
   in
   (e3, p3, q3, bvc3, pbvc3)
 
