@@ -272,7 +272,7 @@ calcElemShapeFunctionDerivatives p =
       b7        = -b1
 
       -- calculate jacobian determinant (volume)
-      volume    = 0.8 * dot fj_eta cj_eta
+      volume    = 8.0 * dot fj_eta cj_eta
   in
   lift ((b0, b1, b2, b3, b4, b5, b6, b7), volume)
 
