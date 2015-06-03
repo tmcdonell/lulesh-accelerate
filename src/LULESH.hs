@@ -826,6 +826,8 @@ calcQForElems params position velocity relativeVolume referenceVolume mass vdov 
 -- Mapping the element to the unit cube simplifies the process of defining a
 -- single value for the viscosity in the element from the gradient information.
 --
+-- The reference code adds a small (1.0e-36) factor into denominators.
+--
 calcMonotonicQGradientsForElem
     :: Exp (Hexahedron Position)
     -> Exp (Hexahedron Velocity)
