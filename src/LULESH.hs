@@ -967,7 +967,7 @@ calcEOSForElem param@Parameters{..} vol delta_vol e p q ql qq =
       comp'     = 1 / (vol' - delta_vol * 0.5) - 1
 
       (e', p', q', bvc, pbvc)   = calcEnergyForElem param e p q ql qq comp comp' vol' delta_vol work
-      ss                        = calcSoundSpeedForElem param vol' e p bvc pbvc
+      ss                        = calcSoundSpeedForElem param vol' e' p' bvc pbvc
   in
   lift (p', e', q', ss)
 
