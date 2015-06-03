@@ -157,9 +157,7 @@ calcVolumeForceForElems
     -> Acc (Field (Hexahedron Force))
 calcVolumeForceForElems Parameters{..} position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass =
   let
-      numNode           = indexHead (shape position)
-      numElem           = numNode - 1
-      sh                = index3 numElem numElem numElem
+      sh                = shape volumeRef
 
       -- sum contributions to total stress tensor
       sigma             = A.zipWith initStressTermsForElem pressure viscosity
@@ -623,14 +621,10 @@ calcLagrangeElements
        , Acc (Field R) )
 calcLagrangeElements dt position velocity relativeVolume referenceVolume =
   let
-      numNode           = indexHead (shape position)
-      numElem           = numNode - 1
-      sh                = index3 numElem numElem numElem
-
       -- calculate new element quantities based on updated position and velocity
       (volRel, deltaVol, vdov, arealg)
         = A.unzip4
-        $ A.generate sh $ \ix ->
+        $ A.generate (shape referenceVolume) $ \ix ->
             let
                 p       = collectToElem position ix
                 v       = collectToElem velocity ix
@@ -801,14 +795,10 @@ calcQForElems
        , Acc (Field Viscosity) )
 calcQForElems params position velocity relativeVolume referenceVolume mass vdov =
   let
-      numNode           = indexHead (shape position)
-      numElem           = numNode - 1
-      sh                = index3 numElem numElem numElem
-
       -- calculate velocity gradients
       (grad_p, grad_v)
         = A.unzip
-        $ A.generate sh $ \ix ->
+        $ A.generate (shape referenceVolume) $ \ix ->
             let
                 p       = collectToElem position ix
                 v       = collectToElem velocity ix
@@ -889,7 +879,7 @@ calcMonotonicQForElems
        , Acc (Field Viscosity) )        -- qq
 calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov =
   let
-      sh                = shape grad_x
+      sh                = shape volRef
       numElem           = indexHead sh
 
       -- Need to compute a stencil on the neighbouring elements of the velocity
