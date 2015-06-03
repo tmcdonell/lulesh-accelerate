@@ -897,32 +897,33 @@ calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov 
 
       -- Calculate one component of the phi term
       --
-      calcPhi :: Exp R -> Exp R -> Exp R
-      calcPhi m p =
+      calcPhi :: Exp R -> Exp R -> Exp R -> Exp R
+      calcPhi l c r =
         let
-            phi = 0.5 * (m + p)
-            m'  = m * monoq_max_slope
-            p'  = p * monoq_max_slope
+            ic  = 1.0 / c
+            l'  = l * ic
+            r'  = r * ic
+            phi = 0.5 * (l' + r')
         in
-        m' `min` phi `min` p' `max` 0 `min` monoq_limiter
+        (l' * monoq_max_slope) `min` phi `min` (r' * monoq_max_slope) `max` 0 `min` monoq_limiter
 
       -- Calculate linear and quadratic terms for viscosity
       --
       viscosity = generate sh $ \ix@(unlift -> Z:.z:.y:.x) ->
         let
             phi = lift $
-              V3 (calcPhi (get  z    y   (x-1) ^._x) (get  z    y   (x+1) ^._x))
-                 (calcPhi (get  z   (y-1) x    ^._y) (get  z   (y+1) x    ^._y))
-                 (calcPhi (get (z-1) y    x    ^._z) (get (z+1) y    x    ^._z))
+              V3 (calcPhi (get  z    y   (x-1) ^._x) (dv^._x) (get  z    y   (x+1) ^._x))
+                 (calcPhi (get  z   (y-1) x    ^._y) (dv^._y) (get  z   (y+1) x    ^._y))
+                 (calcPhi (get (z-1) y    x    ^._z) (dv^._z) (get (z+1) y    x    ^._z))
 
             -- remove length scale
             dx          = grad_x ! ix
             dv          = grad_v ! ix
-            dvx         = lift1 (fmap (max 0) :: V3 (Exp R) -> V3 (Exp R)) (dx * dv)
+            dvx         = lift1 (fmap (min 0) :: V3 (Exp R) -> V3 (Exp R)) (dx * dv)
 
             rho         = elemMass!ix / (volRef!ix * volNew!ix)
             qlin        = -qlc_monoq * rho * dot dvx       (1 - phi)
-            qquad       = -qqc_monoq * rho * dot (dvx*dvx) (1 - phi*phi)
+            qquad       =  qqc_monoq * rho * dot (dvx*dvx) (1 - phi*phi)
         in
         if vdov ! ix >* 0
            then constant (0,0)
