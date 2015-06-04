@@ -900,7 +900,7 @@ calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov 
       calcPhi :: Exp R -> Exp R -> Exp R -> Exp R
       calcPhi l c r =
         let
-            ic  = 1.0 / c
+            ic  = 1.0 / (c + 1.0e-36)
             l'  = l * ic
             r'  = r * ic
             phi = 0.5 * (l' + r')
