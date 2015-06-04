@@ -128,7 +128,7 @@ calcForceForNodes
     -> Acc (Field Pressure)
     -> Acc (Field Viscosity)
     -> Acc (Field Volume)       -- volume
-    -> Acc (Field Volume)       -- reference valume
+    -> Acc (Field Volume)       -- reference volume
     -> Acc (Field R)            -- sound speed
     -> Acc (Field Mass)
     -> Acc (Field Force)
