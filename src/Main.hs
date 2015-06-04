@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 -- |
 -- Module       : Main
 -- Copyright    : [2015] Trevor L. McDonell
@@ -44,6 +45,7 @@ main = do
 --      run       = B.run  (opts ^. optBackend)
       numElem   = opts ^. optSize
       numNode   = numElem + 1
+      maxSteps  = constant (view optMaxSteps opts)
 
       -- We don't have loop-invariant code motion. This forces 'x' to be
       -- evaluated before applying it in 'f'
@@ -62,24 +64,33 @@ main = do
       -- Timestep to solution
       dt0       = unit 1.0e-7
       t0        = unit 0
+      n0        = unit 0
 
-      lulesh    =
+      continue :: Acc Domain -> Acc (Scalar Bool)
+      continue domain =
+        let (_, _, _, _, _, _, _, t, _, n) = unlift domain      :: (Acc (Field Position), Acc (Field Velocity), Acc (Field Energy), Acc (Field Pressure), Acc (Field Viscosity), Acc (Field Volume), Acc (Field R), Acc (Scalar Time), Acc (Scalar Time), Acc (Scalar Int))
+        in  A.zipWith (&&*)
+              (A.map (<* t_end parameters) t)
+              (A.map (<* maxSteps)         n)
+
+      lulesh :: Acc Domain
+      lulesh =
         licm (initElemVolume numElem) $ \v0  ->
         licm (initNodeMass numElem)   $ \mN0 ->
           awhile
-            (\domain -> A.map (<* t_end parameters) (domain ^._7))
-            (\domain ->
+            continue
+            (\(unlift -> (x, dx, e, p, q, v, ss, t, dt, n)) ->
                 let
-                    (x, dx, e, p, q, v, ss, t, dt) = unlift domain
-
                     (x', dx', e', p', q', v', ss', dtc, dth)
                         = lagrangeLeapFrog parameters (the dt) x dx e p q v v0 ss v0 mN0
 
                     (t', dt')
                         = timeIncrement parameters t dt dtc dth
+
+                    n'  = A.map (+1) n
                 in
-                lift (x', dx', e', p', q', v', ss', t', dt'))
-            (lift (x0, dx0, e0, p0, q0, vrel0, ss0, t0, dt0))
+                lift (x', dx', e', p', q', v', ss', t', dt', n'))
+            (lift (x0, dx0, e0, p0, q0, vrel0, ss0, t0, dt0, n0))
 
   print lulesh
 

@@ -8,6 +8,19 @@ import Prelude                                  as P
 import Data.Array.Accelerate                    as A
 
 
+type Domain =
+    ( Field Position
+    , Field Velocity
+    , Field Energy
+    , Field Pressure
+    , Field Viscosity
+    , Field Volume
+    , Field R                   -- sound speed
+    , Scalar Time               -- simulation time
+    , Scalar Time               -- current dt
+    , Scalar Int                -- iteration count
+    )
+
 data Parameters = Parameters
   {
     -- Simulation constants
