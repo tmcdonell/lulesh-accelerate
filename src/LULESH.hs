@@ -1109,8 +1109,8 @@ calcCourantConstraintForElem Parameters{..} ss vdov arealg =
      else let
               qqc'      = 64 * qqc * qqc
               dtf       = ss * ss
-                        + if vdov >* 0 then 0
-                                       else qqc' * arealg * arealg * vdov * vdov
+                        + if vdov >=* 0 then 0
+                                        else qqc' * arealg * arealg * vdov * vdov
           in
           arealg / sqrt dtf
 
