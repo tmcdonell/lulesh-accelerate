@@ -48,7 +48,7 @@ lagrangeLeapFrog
     -> Acc (Field Viscosity)
     -> Acc (Field Volume)       -- relative volume
     -> Acc (Field Volume)       -- reference volume
-    -> Acc (Field R)            -- speed of sound
+    -> Acc (Field SoundSpeed)   -- speed of sound
     -> Acc (Field Mass)         -- element mass
     -> Acc (Field Mass)         -- nodal mass
     -> ( Acc (Field Position)
@@ -98,7 +98,7 @@ lagrangeNodal
     -> Acc (Field Viscosity)
     -> Acc (Field Volume)       -- relative volume
     -> Acc (Field Volume)       -- reference volume
-    -> Acc (Field R)            -- speed of sound
+    -> Acc (Field SoundSpeed)   -- speed of sound
     -> Acc (Field Mass)         -- element mass
     -> Acc (Field Mass)         -- nodal mass
     -> ( Acc (Field Position)
@@ -107,9 +107,9 @@ lagrangeNodal param dt x dx p q v v0 ss mZ mN =
   let
       -- Time of boundary condition evaluation is beginning of step for force
       -- and acceleration boundary conditions
-      f         = calcForceForNodes param x dx p q v v0 ss mZ
-      ddx       = calcAccelerationForNodes f mN
-      dx'       = calcVelocityForNodes param dt dx ddx
+      f'        = calcForceForNodes param x dx p q v v0 ss mZ
+      ddx'      = calcAccelerationForNodes f' mN
+      dx'       = calcVelocityForNodes param dt dx ddx'
       x'        = calcPositionForNodes dt x dx'
   in
   (x', dx')
@@ -129,7 +129,7 @@ calcForceForNodes
     -> Acc (Field Viscosity)
     -> Acc (Field Volume)       -- relative volume
     -> Acc (Field Volume)       -- reference volume
-    -> Acc (Field R)            -- sound speed
+    -> Acc (Field SoundSpeed)   -- sound speed
     -> Acc (Field Mass)         -- element mass
     -> Acc (Field Force)
 calcForceForNodes param x dx p q v v0 ss mZ
@@ -155,35 +155,21 @@ calcVolumeForceForElems
     -> Acc (Field R)
     -> Acc (Field Mass)
     -> Acc (Field (Hexahedron Force))
-calcVolumeForceForElems Parameters{..} position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass =
+calcVolumeForceForElems param x dx p q v v0 ss mZ =
   let
-      sh                = shape volumeRef
-
       -- sum contributions to total stress tensor
-      sigma             = A.zipWith initStressTermsForElem pressure viscosity
+      sigma             = A.zipWith initStressTermsForElem p q
 
       -- calculate nodal forces from element stresses
-      (stress, _determ) = A.unzip
-                        $ A.zipWith integrateStressForElem
-                                    (generate sh (collectToElem position))
-                                    sigma
+      (stress, determ)  = integrateStressForElems x sigma
 
       -- TODO: check for negative element volume
-      -- A.any (<=* 0) determ --> error
+      _volumeError      = A.any (<=* 0) determ
 
       -- Calculate the hourglass control contribution for each element
-      hourglass         = generate sh $ \ix ->
-        let pos         = collectToElem position ix
-            vel         = collectToElem velocity ix
+      hourglass         = calcHourglassControlForElems param x dx v v0 ss mZ
 
-            v           = volumeRel  ! ix
-            volo        = volumeRef  ! ix
-            ss          = soundSpeed ! ix
-            mass        = elemMass   ! ix
-        in
-        calcHourglassControlForElem pos vel volo v ss mass hgcoef
-
-      -- Add the nodal forces
+      -- Combine the nodal force contributions
       combine :: Exp (Hexahedron Force) -> Exp (Hexahedron Force) -> Exp (Hexahedron Force)
       combine x y       = lift ( x^._0 + y^._0
                                , x^._1 + y^._1
@@ -220,15 +206,26 @@ initStressTermsForElem p q =
 -- Instead, we just return all the values directly, and the individual
 -- contributions to the nodes will be combined in a different step.
 --
+integrateStressForElems
+    :: Acc (Field Position)
+    -> Acc (Field Sigma)
+    -> ( Acc (Field (Hexahedron Force))
+       , Acc (Field Volume) )
+integrateStressForElems x sigma
+  = A.unzip
+  $ A.zipWith integrateStressForElem
+        (generate (shape sigma) (collectToElem x))
+        sigma
+
 integrateStressForElem
     :: Exp (Hexahedron Position)
     -> Exp Sigma
     -> Exp (Hexahedron Force, Volume)
-integrateStressForElem p sigma =
+integrateStressForElem x sigma =
   let
       -- Volume calculation involves extra work for numerical consistency
-      det    = calcElemShapeFunctionDerivatives p ^._1
-      b      = calcElemNodeNormals p
+      det    = calcElemShapeFunctionDerivatives x ^._1
+      b      = calcElemNodeNormals x
       f      = sumElemStressesToNodeForces b sigma
   in
   lift (f, det)
@@ -383,34 +380,53 @@ calcElemVolumeDerivative p =
 --         hourglass control", Flanagan, D. P. and Belytschko, T. International
 --         Journal for Numerical Methods in Engineering, (17) 5, May 1981.
 --
+calcHourglassControlForElems
+    :: Parameters
+    -> Acc (Field Position)
+    -> Acc (Field Velocity)
+    -> Acc (Field Volume)       -- relative volume
+    -> Acc (Field Volume)       -- reference volume
+    -> Acc (Field SoundSpeed)   -- speed of sound in element
+    -> Acc (Field Mass)         -- element mass
+    -> Acc (Field (Hexahedron Force))
+calcHourglassControlForElems param x dx v v0 ss mZ =
+  generate (shape v0) $ \ix ->
+    let
+        hx      = collectToElem x  ix
+        hdx     = collectToElem dx ix
+    in
+    calcHourglassControlForElem param hx hdx (v!ix) (v0!ix) (ss!ix) (mZ!ix)
+
+
 calcHourglassControlForElem
-    :: Exp (Hexahedron Position)
+    :: Parameters
+    -> Exp (Hexahedron Position)
     -> Exp (Hexahedron Velocity)
     -> Exp Volume                       -- relative volume
     -> Exp Volume                       -- reference volume
-    -> Exp R                            -- speed of sound
-    -> Exp Mass                         -- mass
-    -> Exp R
+    -> Exp SoundSpeed                   -- speed of sound
+    -> Exp Mass                         -- element mass
     -> Exp (Hexahedron Force)
-calcHourglassControlForElem pos vel volo v ss mass hourg =
-  let dvol      = calcElemVolumeDerivative pos
-      determ    = volo * v
+calcHourglassControlForElem param@Parameters{..} x dx v v0 ss mZ =
+  let
+      dv        = calcElemVolumeDerivative x
+      determ    = v * v0
   in
-  if hourg >* 0
-     then calcFBHourglassForceForElem pos vel determ dvol ss mass hourg
+  if hgcoef >* 0
+     then calcFBHourglassForceForElem param x dx determ dv ss mZ
      else constant (0,0,0,0,0,0,0,0)
 
 
 calcFBHourglassForceForElem
-    :: Exp (Hexahedron Position)
+    :: Parameters
+    -> Exp (Hexahedron Position)
     -> Exp (Hexahedron Velocity)
-    -> Exp Volume
-    -> Exp (Hexahedron (V3 R))          -- from calcElemVolumeDerivative
-    -> Exp R                            -- speed of sound
-    -> Exp Mass                         -- mass
-    -> Exp R
+    -> Exp Volume                       -- actual volume
+    -> Exp (Hexahedron (V3 R))          -- volume derivatives
+    -> Exp SoundSpeed                   -- speed of sound
+    -> Exp Mass                         -- element mass
     -> Exp (Hexahedron Force)
-calcFBHourglassForceForElem pos vel determ dvol ss mass hourg =
+calcFBHourglassForceForElem Parameters{..} x dx determ dv ss mZ =
   let
       -- Hourglass base vectors, from [1] table 1. This defines the hourglass
       -- patterns for a unit cube.
@@ -436,21 +452,21 @@ calcFBHourglassForceForElem pos vel determ dvol ss mass hourg =
 
             volinv      = 1 / determ
         in
-        lift ( hg (gamma^._0) (pos^._0) (dvol^._0)
-             , hg (gamma^._1) (pos^._1) (dvol^._1)
-             , hg (gamma^._2) (pos^._2) (dvol^._2)
-             , hg (gamma^._3) (pos^._3) (dvol^._3)
-             , hg (gamma^._4) (pos^._4) (dvol^._4)
-             , hg (gamma^._5) (pos^._5) (dvol^._5)
-             , hg (gamma^._6) (pos^._6) (dvol^._6)
-             , hg (gamma^._7) (pos^._7) (dvol^._7)
+        lift ( hg (gamma^._0) (x^._0) (dv^._0)
+             , hg (gamma^._1) (x^._1) (dv^._1)
+             , hg (gamma^._2) (x^._2) (dv^._2)
+             , hg (gamma^._3) (x^._3) (dv^._3)
+             , hg (gamma^._4) (x^._4) (dv^._4)
+             , hg (gamma^._5) (x^._5) (dv^._5)
+             , hg (gamma^._6) (x^._6) (dv^._6)
+             , hg (gamma^._7) (x^._7) (dv^._7)
              )
 
       -- Compute forces
       cbrt x      = x ** (1/3)          -- cube root
-      coefficient = - hourg * 0.01 * ss * mass / cbrt determ
+      coefficient = - hgcoef * 0.01 * ss * mZ / cbrt determ
   in
-  calcElemFBHourglassForce coefficient vel hourgam
+  calcElemFBHourglassForce coefficient dx hourgam
 
 
 calcElemFBHourglassForce
@@ -458,17 +474,17 @@ calcElemFBHourglassForce
     -> Exp (Hexahedron Velocity)
     -> Exp (Hexahedron (V4 R))
     -> Exp (Hexahedron Force)
-calcElemFBHourglassForce coefficient vel hourgam =
+calcElemFBHourglassForce coefficient dx hourgam =
   let
       -- TLM: this looks like a small matrix multiplication?
 
       h00, h01, h02, h03 :: Exp (V3 R)
-      h00 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._x)) (vel ^.. each)
-      h01 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._y)) (vel ^.. each)
-      h02 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._z)) (vel ^.. each)
-      h03 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._w)) (vel ^.. each)
+      h00 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._x)) (dx ^.. each)
+      h01 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._y)) (dx ^.. each)
+      h02 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._z)) (dx ^.. each)
+      h03 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._w)) (dx ^.. each)
 
-      hh :: Exp (V4 (V3 R))
+      hh :: Exp (M43 R)
       hh  = lift (V4 h00 h01 h02 h03)
 
       hg :: Exp (V4 R) -> Exp Force
@@ -1044,7 +1060,7 @@ calcSoundSpeedForElem
     -> Exp Pressure
     -> Exp R
     -> Exp R
-    -> Exp R
+    -> Exp SoundSpeed
 calcSoundSpeedForElem Parameters{..} v e p bvc pbvc =
   let
       ss = (pbvc * e + v * v * p * bvc ) / ref_dens
@@ -1099,7 +1115,7 @@ calcTimeConstraints param ss vdov arealg =
 --
 calcCourantConstraintForElem
     :: Parameters
-    -> Exp R            -- sound speed
+    -> Exp SoundSpeed
     -> Exp R            -- vdot / v
     -> Exp R            -- characteristic length
     -> Exp Time

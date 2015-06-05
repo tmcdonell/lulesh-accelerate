@@ -29,8 +29,8 @@ type Pressure           = R             -- pressure (old: p)
 type Energy             = R             -- internal energy (old: e)
 type Volume             = R             -- relative volume (old: v)
 type Viscosity          = R
-type Epsilon            = V3 R          -- diagonal terms of deviatoric strain (old: dxx, dyy, dzz)
 type Density            = R
+type SoundSpeed         = R
 
 -- Other useful type synonyms
 type Normal             = V3 R          -- normal vector

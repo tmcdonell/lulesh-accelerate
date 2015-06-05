@@ -42,15 +42,15 @@ timeIncrement' Parameters{..} t_now dt_old dt_courant dt_hydro =
 
       -- try to prevent very small scaling on the next cycle
       target    = if dt_end >* step &&* dt_end <* 4 * step / 3
-                     then 2 * step / 3
+                     then 2 / 3 * step
                      else dt_end
 
       -- increment the previous timestep by a small amount
       step      = min dt_new dt_max
 
       c1        = 1.0e20
-      c2        = if dt_courant <* c1 then dt_courant / 2   else c1
-      c3        = if dt_hydro   <* c2 then dt_hydro * 2 / 3 else c2
+      c2        = if dt_courant <* c1 then 0.5 * dt_courant else c1
+      c3        = if dt_hydro   <* c2 then 2/3 * dt_hydro   else c2
 
       ratio     = c3 / dt_old
       dt_new    = caseof ratio
