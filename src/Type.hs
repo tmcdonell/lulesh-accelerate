@@ -4,7 +4,7 @@ module Type where
 import Data.Array.Accelerate
 import Data.Array.Accelerate.Linear
 
-import Control.Lens                             ( Lens, Field1, Field2, Field3, Field4, Field5, Field6, Field7, Field8 )
+import Control.Lens                             ( Lens, Field1, Field2, Field3, Field4, Field5, Field6, Field7, Field8, Field9 )
 import qualified Control.Lens.Tuple             as L
 
 
@@ -64,4 +64,7 @@ _6 = L._7
 
 _7 :: Field8 s t a b => Lens s t a b
 _7 = L._8
+
+_8 :: Field9 s t a b => Lens s t a b
+_8 = L._9
 
