@@ -477,7 +477,7 @@ calcElemFBHourglassForce coefficient dx hourgam =
       hh  = lift (V4 h00 h01 h02 h03)
 
       hg :: Exp (V4 R) -> Exp Force
-      hg h = coefficient *^ (P.sum $ P.zipWith (*^) (h^..each) (hh^..each))
+      hg h = coefficient *^ (h *! hh)
   in
   over each hg hourgam
 
