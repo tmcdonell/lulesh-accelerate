@@ -167,7 +167,14 @@ calcVolumeForceForElems param x dx p q v v0 ss mZ =
       _volumeError      = A.any (<=* 0) determ
 
       -- Calculate the hourglass control contribution for each element
-      hourglass         = calcHourglassControlForElems param x dx v v0 ss mZ
+      hourglass         = A.generate (shape v0)
+                        $ \ix -> calcHourglassControlForElem param
+                                    (collectToElem x  ix)
+                                    (collectToElem dx ix)
+                                    (v !ix)
+                                    (v0!ix)
+                                    (ss!ix)
+                                    (mZ!ix)
 
       -- Combine the nodal force contributions
       combine :: Exp (Hexahedron Force) -> Exp (Hexahedron Force) -> Exp (Hexahedron Force)
@@ -380,24 +387,6 @@ calcElemVolumeDerivative p =
 --         hourglass control", Flanagan, D. P. and Belytschko, T. International
 --         Journal for Numerical Methods in Engineering, (17) 5, May 1981.
 --
-calcHourglassControlForElems
-    :: Parameters
-    -> Acc (Field Position)
-    -> Acc (Field Velocity)
-    -> Acc (Field Volume)       -- relative volume
-    -> Acc (Field Volume)       -- reference volume
-    -> Acc (Field SoundSpeed)   -- speed of sound in element
-    -> Acc (Field Mass)         -- element mass
-    -> Acc (Field (Hexahedron Force))
-calcHourglassControlForElems param x dx v v0 ss mZ =
-  generate (shape v0) $ \ix ->
-    let
-        hx      = collectToElem x  ix
-        hdx     = collectToElem dx ix
-    in
-    calcHourglassControlForElem param hx hdx (v!ix) (v0!ix) (ss!ix) (mZ!ix)
-
-
 calcHourglassControlForElem
     :: Parameters
     -> Exp (Hexahedron Position)
@@ -623,8 +612,6 @@ lagrangeElements params dt x dx v v0 q e p mZ =
 -- | Calculate various element quantities that are based on the new kinematic
 -- node quantities position and velocity.
 --
--- TODO: Check for negative element volume
---
 calcLagrangeElements
     :: Exp Time
     -> Acc (Field Position)     -- nodal position
@@ -646,6 +633,9 @@ calcLagrangeElements dt x dx v v0 =
                     (collectToElem dx ix)
                     (v !ix)
                     (v0!ix)
+
+      -- TODO: Check for negative element volume
+      _volumeError = A.any (<=* 0) v'
   in
   (v', dv', vdov, arealg)
 
