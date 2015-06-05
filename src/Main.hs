@@ -1,4 +1,5 @@
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 -- |
 -- Module       : Main
 -- Copyright    : [2015] Trevor L. McDonell
@@ -66,7 +67,7 @@ main = do
       t0        = unit 0
       n0        = unit 0
 
-      initial  :: Acc Domain
+      initial :: Acc Domain
       initial = lift (x0, dx0, e0, p0, q0, vrel0, ss0, t0, dt0, n0)
 
       -- Timestep to solution
@@ -96,15 +97,17 @@ main = do
                 lift (x', dx', e', p', q', v', ss', t', dt', n'))
             initial
 
-      (x, dx, e, p, q, v, ss, t, dt, n) = run lulesh
+      (_, _, e, _, _, _, _, _, _, n) = run lulesh
 
-  begin <- getCurrentTime
-  x `seq` return ()
-  end   <- getCurrentTime
+  printf "Running problem size     : %d^3\n" numElem
+  printf "Total number of elements : %d\n" (numElem * numElem * numElem)
 
-  printf "Elapsed time: %s\n\n" (show (diffUTCTime end begin))
-  printf "Run completed:\n"
-  printf "   Problem size        = %d\n" numElem
-  printf "   Iteration count     = %d\n" (n `indexArray` Z)
-  printf "   Final origin energy = %g\n" (e `indexArray` (Z:.0:.0:.0))
+  t1 <- getCurrentTime
+  e `seq` return ()
+  t2 <- getCurrentTime
+
+  printf "Elapsed time: %s\n\n" (show (diffUTCTime t2 t1))
+  printf "Run completed\n"
+  printf "   Iteration count     : %d\n"   (n `indexArray` Z)
+  printf "   Final origin energy : %.6e\n" (e `indexArray` (Z:.0:.0:.0))
 
