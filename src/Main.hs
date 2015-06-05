@@ -29,12 +29,14 @@ import LULESH
 import Options
 import Time
 import Type
--- import qualified Backend                                as B
+import qualified Backend                                as B
 
 import Prelude                                          as P hiding ( (<*) )
+import Data.Time
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.Linear                     as A
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
+import Text.Printf
 
 
 main :: IO ()
@@ -42,7 +44,7 @@ main = do
   (opts,_)      <- parseArgs
 
   let
---      run       = B.run  (opts ^. optBackend)
+      run       = B.run (opts ^. optBackend)
       numElem   = opts ^. optSize
       numNode   = numElem + 1
       maxSteps  = constant (view optMaxSteps opts)
@@ -60,12 +62,14 @@ main = do
       ss0       = zeros
       vrel0     = A.fill (constant (Z:.numElem:.numElem:.numElem)) 1
       zeros     = A.fill (constant (Z:.numElem:.numElem:.numElem)) 0
-
-      -- Timestep to solution
       dt0       = unit 1.0e-7
       t0        = unit 0
       n0        = unit 0
 
+      initial  :: Acc Domain
+      initial = lift (x0, dx0, e0, p0, q0, vrel0, ss0, t0, dt0, n0)
+
+      -- Timestep to solution
       continue :: Acc Domain -> Acc (Scalar Bool)
       continue domain =
         let (_, _, _, _, _, _, _, t, _, n) = unlift domain      :: (Acc (Field Position), Acc (Field Velocity), Acc (Field Energy), Acc (Field Pressure), Acc (Field Viscosity), Acc (Field Volume), Acc (Field R), Acc (Scalar Time), Acc (Scalar Time), Acc (Scalar Int))
@@ -90,7 +94,17 @@ main = do
                     n'  = A.map (+1) n
                 in
                 lift (x', dx', e', p', q', v', ss', t', dt', n'))
-            (lift (x0, dx0, e0, p0, q0, vrel0, ss0, t0, dt0, n0))
+            initial
 
-  print lulesh
+      (x, dx, e, p, q, v, ss, t, dt, n) = run lulesh
+
+  begin <- getCurrentTime
+  x `seq` return ()
+  end   <- getCurrentTime
+
+  printf "Elapsed time: %s\n\n" (show (diffUTCTime end begin))
+  printf "Run completed:\n"
+  printf "   Problem size        = %d\n" numElem
+  printf "   Iteration count     = %d\n" (n `indexArray` Z)
+  printf "   Final origin energy = %g\n" (e `indexArray` (Z:.0:.0:.0))
 
