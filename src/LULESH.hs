@@ -103,16 +103,16 @@ lagrangeNodal
     -> Acc (Field Mass)         -- nodal mass
     -> ( Acc (Field Position)
        , Acc (Field Velocity) )
-lagrangeNodal param dt position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass nodalMass =
+lagrangeNodal param dt x dx p q v v0 ss mZ mN =
   let
       -- Time of boundary condition evaluation is beginning of step for force
       -- and acceleration boundary conditions
-      force             = calcForceForNodes param position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
-      acceleration      = calcAccelerationForNodes force nodalMass
-      velocity'         = calcVelocityForNodes param dt velocity acceleration
-      position'         = calcPositionForNodes dt position velocity'
+      f         = calcForceForNodes param x dx p q v v0 ss mZ
+      ddx       = calcAccelerationForNodes f mN
+      dx'       = calcVelocityForNodes param dt dx ddx
+      x'        = calcPositionForNodes dt x dx'
   in
-  (position', velocity')
+  (x', dx')
 
 
 -- | Calculate the three-dimensional force vector F at each mesh node based on
@@ -127,14 +127,14 @@ calcForceForNodes
     -> Acc (Field Velocity)
     -> Acc (Field Pressure)
     -> Acc (Field Viscosity)
-    -> Acc (Field Volume)       -- volume
+    -> Acc (Field Volume)       -- relative volume
     -> Acc (Field Volume)       -- reference volume
     -> Acc (Field R)            -- sound speed
-    -> Acc (Field Mass)
+    -> Acc (Field Mass)         -- element mass
     -> Acc (Field Force)
-calcForceForNodes param position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
+calcForceForNodes param x dx p q v v0 ss mZ
   = distributeToNode (+) 0
-  $ calcVolumeForceForElems param position velocity pressure viscosity volumeRel volumeRef soundSpeed elemMass
+  $ calcVolumeForceForElems param x dx p q v v0 ss mZ
 
 
 -- | Calculate the volume force contribute for each hexahedral mesh element. The
@@ -481,12 +481,12 @@ calcElemFBHourglassForce coefficient vel hourgam =
 -- apply the symmetry boundary conditions.
 --
 calcAccelerationForNodes
-    :: Acc (Field Force)
-    -> Acc (Field Mass)
+    :: Acc (Field Force)                -- force at each node
+    -> Acc (Field Mass)                 -- nodal mass
     -> Acc (Field Acceleration)
-calcAccelerationForNodes force mass
+calcAccelerationForNodes f mN
   = applyAccelerationBoundaryConditionsForNodes
-  $ A.zipWith (^/) force mass
+  $ A.zipWith (^/) f mN
 
 
 -- | Applies symmetry boundary conditions at nodes on the boundaries of the
@@ -509,11 +509,11 @@ applyAccelerationBoundaryConditionsForNodes acc =
   generate (shape acc) $ \ix ->
     let
         Z :. z :. y :. x        = unlift ix
-        V3 xd yd zd             = unlift $ acc ! ix
+        V3 ddx ddy ddz          = unlift $ acc ! ix
     in
-    lift $ V3 (x ==* 0 ? (0, xd))
-              (y ==* 0 ? (0, yd))
-              (z ==* 0 ? (0, zd))
+    lift $ V3 (x ==* 0 ? (0, ddx))
+              (y ==* 0 ? (0, ddy))
+              (z ==* 0 ? (0, ddz))
 
 
 -- | Integrate the acceleration at each node to advance the velocity at the
