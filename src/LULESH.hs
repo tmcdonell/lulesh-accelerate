@@ -419,7 +419,6 @@ calcFBHourglassForceForElem Parameters{..} x dx determ dv ss mZ =
   let
       -- Hourglass base vectors, from [1] table 1. This defines the hourglass
       -- patterns for a unit cube.
-      --
       gamma :: Exp (Hexahedron (V4 R))
       gamma = constant
         ( V4 ( 1) ( 1) ( 1) (-1)
@@ -432,23 +431,28 @@ calcFBHourglassForceForElem Parameters{..} x dx determ dv ss mZ =
         , V4 ( 1) (-1) (-1) (-1)
         )
 
+      -- transpose x !*! gamma
+      hourmod :: Exp (M34 R)
+      hourmod = lift $
+        V3 (P.sum $ P.zipWith (*^) (x ^.. (each._x)) (gamma ^.. each))
+           (P.sum $ P.zipWith (*^) (x ^.. (each._y)) (gamma ^.. each))
+           (P.sum $ P.zipWith (*^) (x ^.. (each._z)) (gamma ^.. each))
+
       -- Compute hourglass modes
-      --
       hourgam :: Exp (Hexahedron (V4 R))
       hourgam =
-        let hg :: Exp (V4 R) -> Exp (Position) -> Exp (V3 R) -> Exp (V4 R)
-            hg g p dv   = (1 - volinv * dot dv p) *^ g
-
+        let hg :: Exp (V4 R) -> Exp (V3 R) -> Exp (V4 R)
+            hg g dv     = g - volinv *^ (dv *! hourmod)
             volinv      = 1 / determ
         in
-        lift ( hg (gamma^._0) (x^._0) (dv^._0)
-             , hg (gamma^._1) (x^._1) (dv^._1)
-             , hg (gamma^._2) (x^._2) (dv^._2)
-             , hg (gamma^._3) (x^._3) (dv^._3)
-             , hg (gamma^._4) (x^._4) (dv^._4)
-             , hg (gamma^._5) (x^._5) (dv^._5)
-             , hg (gamma^._6) (x^._6) (dv^._6)
-             , hg (gamma^._7) (x^._7) (dv^._7)
+        lift ( hg (gamma^._0) (dv^._0)
+             , hg (gamma^._1) (dv^._1)
+             , hg (gamma^._2) (dv^._2)
+             , hg (gamma^._3) (dv^._3)
+             , hg (gamma^._4) (dv^._4)
+             , hg (gamma^._5) (dv^._5)
+             , hg (gamma^._6) (dv^._6)
+             , hg (gamma^._7) (dv^._7)
              )
 
       -- Compute forces
@@ -465,8 +469,7 @@ calcElemFBHourglassForce
     -> Exp (Hexahedron Force)
 calcElemFBHourglassForce coefficient dx hourgam =
   let
-      -- TLM: this looks like a small matrix multiplication?
-
+      -- transpose hourgam !*! dx
       h00, h01, h02, h03 :: Exp (V3 R)
       h00 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._x)) (dx ^.. each)
       h01 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._y)) (dx ^.. each)
