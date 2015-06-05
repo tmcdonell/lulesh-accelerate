@@ -569,7 +569,7 @@ integrate
     -> Acc (Field (V3 R))
     -> Acc (Field (V3 R))
 integrate dt
-  = A.zipWith (\x xd -> x + xd ^* dt)
+  = A.zipWith (\x dx -> x + dx ^* dt)
 
 
 -- Advance Element Quantities
@@ -603,21 +603,21 @@ lagrangeElements
        , Acc (Field R)
        , Acc (Field R)
        , Acc (Field R) )
-lagrangeElements params dt position velocity relativeVolume referenceVolume viscosity energy pressure elemMass =
+lagrangeElements params dt x dx v v0 q e p mZ =
   let
-      (newVol, deltaVol, vdov, arealg)
-          = calcLagrangeElements dt position velocity relativeVolume referenceVolume
+      (v', dv', vdov, arealg)
+          = calcLagrangeElements dt x dx v v0
 
       (ql, qq)
-          = calcQForElems params position velocity newVol referenceVolume elemMass vdov
+          = calcQForElems params x dx v' v0 mZ vdov
 
-      (p, e, q, ss)
+      (p', e', q', ss')
           = A.unzip4
-          $ A.zipWith7 (calcEOSForElem params) newVol deltaVol energy pressure viscosity ql qq
+          $ A.zipWith7 (calcEOSForElem params) v' dv' e p q ql qq
 
-      vol = A.map (updateVolumeForElem params) newVol
+      v'' = A.map (updateVolumeForElem params) v'
   in
-  (p, e, q, vol, ss, vdov, arealg)
+  (p', e', q', v'', ss', vdov, arealg)
 
 
 -- | Calculate various element quantities that are based on the new kinematic
@@ -635,21 +635,19 @@ calcLagrangeElements
        , Acc (Field Volume)
        , Acc (Field R)
        , Acc (Field R) )
-calcLagrangeElements dt position velocity relativeVolume referenceVolume =
+calcLagrangeElements dt x dx v v0 =
   let
       -- calculate new element quantities based on updated position and velocity
-      (volRel, deltaVol, vdov, arealg)
+      (v', dv', vdov, arealg)
         = A.unzip4
-        $ A.generate (shape referenceVolume) $ \ix ->
-            let
-                p       = collectToElem position ix
-                v       = collectToElem velocity ix
-                vol     = relativeVolume  ! ix
-                vol0    = referenceVolume ! ix
-            in
-            calcKinematicsForElem dt p v vol vol0
+        $ A.generate (shape v0)
+        $ \ix -> calcKinematicsForElem dt
+                    (collectToElem x  ix)
+                    (collectToElem dx ix)
+                    (v !ix)
+                    (v0!ix)
   in
-  (volRel, deltaVol, vdov, arealg)
+  (v', dv', vdov, arealg)
 
 
 -- | Calculate terms in the total strain rate tensor epsilon_tot that are used
@@ -659,43 +657,43 @@ calcKinematicsForElem
     :: Exp Time
     -> Exp (Hexahedron Position)
     -> Exp (Hexahedron Velocity)
-    -> Exp Volume
-    -> Exp Volume
+    -> Exp Volume                       -- relative volume
+    -> Exp Volume                       -- reference volume
     -> Exp (Volume, Volume, R, R)
-calcKinematicsForElem dt p v volRelOld vol0 =
+calcKinematicsForElem dt x dx v v0 =
   let
       -- (relative) volume calculations
-      vol       = calcElemVolume p
-      volRel    = vol / vol0
-      deltaVol  = volRel - volRelOld
+      vol'      = calcElemVolume x
+      v'        = vol' / v0
+      dv'       = v' - v
 
       -- characteristic length
-      arealg    = calcElemCharacteristicLength p vol
+      arealg    = calcElemCharacteristicLength x vol'
 
       -- modify nodal positions to be halfway between time(n) and time(n+1)
       mid :: Exp (V3 R) -> Exp (V3 R) -> Exp (V3 R)
       mid x xd  = x - 0.5 * dt *^ xd
 
-      p'        = lift ( mid (p^._0) (v^._0)
-                       , mid (p^._1) (v^._1)
-                       , mid (p^._2) (v^._2)
-                       , mid (p^._3) (v^._3)
-                       , mid (p^._4) (v^._4)
-                       , mid (p^._5) (v^._5)
-                       , mid (p^._6) (v^._6)
-                       , mid (p^._7) (v^._7)
+      midx      = lift ( mid (x^._0) (dx^._0)
+                       , mid (x^._1) (dx^._1)
+                       , mid (x^._2) (dx^._2)
+                       , mid (x^._3) (dx^._3)
+                       , mid (x^._4) (dx^._4)
+                       , mid (x^._5) (dx^._5)
+                       , mid (x^._6) (dx^._6)
+                       , mid (x^._7) (dx^._7)
                        )
 
       -- Use midpoint nodal positions to calculate velocity gradient and
       -- strain rate tensor
-      (b, det)  = unlift $ calcElemShapeFunctionDerivatives p'
-      d         = calcElemVelocityGradient v b det
+      (b, det)  = unlift $ calcElemShapeFunctionDerivatives midx
+      d         = calcElemVelocityGradient dx b det
 
       -- calculate the deviatoric strain rate tensor
-      vdov      = P.sum (unlift d :: V3 (Exp R))        -- no foldable instance for (Exp V3) ):
+      vdov      = P.sum (unlift d :: V3 (Exp R))        -- TLM: no Foldable instance for (Exp V3) ):
       _strain   = d ^- (vdov / 3.0)
   in
-  lift (volRel, deltaVol, vdov, arealg)
+  lift (v', dv', vdov, arealg)
 
 
 -- | Calculate the volume of an element given the nodal coordinates
@@ -732,7 +730,7 @@ calcElemCharacteristicLength
     :: Exp (Hexahedron Position)
     -> Exp Volume
     -> Exp R
-calcElemCharacteristicLength p v =
+calcElemCharacteristicLength x v =
   let
       faceArea :: Exp (Quad Position) -> Exp R
       faceArea face =
@@ -747,7 +745,7 @@ calcElemCharacteristicLength p v =
 
       area = P.maximum
            $ P.map faceArea
-           $ P.map (flip collectFace p) [0..5]
+           $ P.map (flip collectFace x) [0..5]
   in
   4.0 * v / sqrt area
 
@@ -761,7 +759,7 @@ calcElemVelocityGradient
     -> Exp (Hexahedron Force)
     -> Exp Volume
     -> Exp (V3 R)
-calcElemVelocityGradient v b det =
+calcElemVelocityGradient dx b det =
   let
       -- TLM: unfortunately the (Accelerate) simplifier does not spot that the
       --      off-diagonal elements of the matrix are unused. Thus, we will need
@@ -772,10 +770,10 @@ calcElemVelocityGradient v b det =
       mm      = inv_det *!! (transpose pf !*! vd)
 
       vd :: Exp (M43 R)
-      vd = lift $ V4 (v^._0 - v^._6)
-                     (v^._1 - v^._7)
-                     (v^._2 - v^._4)
-                     (v^._3 - v^._5)
+      vd = lift $ V4 (dx^._0 - dx^._6)
+                     (dx^._1 - dx^._7)
+                     (dx^._2 - dx^._4)
+                     (dx^._3 - dx^._5)
 
       pf :: Exp (M43 R)
       pf = lift $ V4 (b^._0)
@@ -797,38 +795,34 @@ calcElemVelocityGradient v b det =
 --       artificial viscosity". Lawrence Livermore National Laboratory Report,
 --       UCRL-JC-105-269, 1991. https://e-reports-ext.llnl.gov/pdf/219547.pdf
 --
--- TODO: Don't allow excessive artificial viscosity. If any q > qstop: exit
---
 calcQForElems
     :: Parameters
     -> Acc (Field Position)
     -> Acc (Field Velocity)
     -> Acc (Field Volume)
     -> Acc (Field Volume)
-    -> Acc (Field Mass)
+    -> Acc (Field Mass)         -- element mass
     -> Acc (Field R)            -- vdot / v
     -> ( Acc (Field Viscosity)
        , Acc (Field Viscosity) )
-calcQForElems params position velocity relativeVolume referenceVolume mass vdov =
+calcQForElems params x dx v v0 mZ vdov =
   let
       -- calculate velocity gradients
       (grad_p, grad_v)
         = A.unzip
-        $ A.generate (shape referenceVolume) $ \ix ->
-            let
-                p       = collectToElem position ix
-                v       = collectToElem velocity ix
-                volRel  = relativeVolume  ! ix
-                volRef  = referenceVolume ! ix
-            in
-            calcMonotonicQGradientsForElem p v volRel volRef
+        $ A.generate (shape v0)
+        $ \ix -> calcMonotonicQGradientsForElem
+                    (collectToElem x  ix)
+                    (collectToElem dx ix)
+                    (v !ix)
+                    (v0!ix)
 
       -- Transfer velocity gradients in the first order elements
       (ql, qq)
-        = calcMonotonicQForElems params grad_p grad_v relativeVolume referenceVolume mass vdov
+        = calcMonotonicQForElems params grad_p grad_v v v0 mZ vdov
 
       -- TODO: don't allow excessive artificial viscosity
-      -- A.maximum q >* qstop --> error
+      -- _viscosityError = A.any (>* qstop) q
   in
   (ql, qq)
 
@@ -850,32 +844,32 @@ calcMonotonicQGradientsForElem
     -> Exp Volume
     -> Exp Volume
     -> Exp (Gradient Position, Gradient Velocity)
-calcMonotonicQGradientsForElem p v volRel vol0 =
+calcMonotonicQGradientsForElem x dx v v0 =
   let
-      vol               = volRel * vol0
+      vol               = v * v0
       ivol              = 1 / vol
 
-      p_eta, p_xi, p_zeta :: Exp Position
-      p_eta             = 0.25 *^ (sumOf each (collectFace 3 p) - sumOf each (collectFace 1 p))
-      p_xi              = 0.25 *^ (sumOf each (collectFace 2 p) - sumOf each (collectFace 4 p))
-      p_zeta            = 0.25 *^ (sumOf each (collectFace 5 p) - sumOf each (collectFace 0 p))
+      x_eta, x_xi, x_zeta :: Exp Position
+      x_eta             = 0.25 *^ (sumOf each (collectFace 3 x) - sumOf each (collectFace 1 x))
+      x_xi              = 0.25 *^ (sumOf each (collectFace 2 x) - sumOf each (collectFace 4 x))
+      x_zeta            = 0.25 *^ (sumOf each (collectFace 5 x) - sumOf each (collectFace 0 x))
 
-      v_eta, v_xi, v_zeta :: Exp Velocity
-      v_eta             = 0.25 *^ (sumOf each (collectFace 3 v) - sumOf each (collectFace 1 v))
-      v_xi              = 0.25 *^ (sumOf each (collectFace 2 v) - sumOf each (collectFace 4 v))
-      v_zeta            = 0.25 *^ (sumOf each (collectFace 5 v) - sumOf each (collectFace 0 v))
+      dx_eta, dx_xi, dx_zeta :: Exp Velocity
+      dx_eta            = 0.25 *^ (sumOf each (collectFace 3 dx) - sumOf each (collectFace 1 dx))
+      dx_xi             = 0.25 *^ (sumOf each (collectFace 2 dx) - sumOf each (collectFace 4 dx))
+      dx_zeta           = 0.25 *^ (sumOf each (collectFace 5 dx) - sumOf each (collectFace 0 dx))
 
-      a                 = cross p_xi   p_eta
-      b                 = cross p_eta  p_zeta
-      c                 = cross p_zeta p_xi
+      a                 = cross x_xi   x_eta
+      b                 = cross x_eta  x_zeta
+      c                 = cross x_zeta x_xi
 
       grad_x            = V3 (vol / norm b)
                              (vol / norm c)
                              (vol / norm a)
 
-      grad_v            = V3 (ivol * dot b v_xi)
-                             (ivol * dot c v_eta)
-                             (ivol * dot a v_zeta)
+      grad_v            = V3 (ivol * dot b dx_xi)
+                             (ivol * dot c dx_eta)
+                             (ivol * dot a dx_zeta)
   in
   lift (grad_x, grad_v)
 
