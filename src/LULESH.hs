@@ -360,7 +360,7 @@ calcElemVolumeDerivative p =
             p25 = p^._2 + p^._5
             p35 = p^._3 + p^._5
         in
-        (1/12) * cross p12 p01 + cross p04 p34 + cross p35 p25
+        (1/12) * (cross p12 p01 + cross p04 p34 + cross p35 p25)
   in
   lift ( volumeDerivative (lift (p^._1, p^._2, p^._3, p^._4, p^._5, p^._7))
        , volumeDerivative (lift (p^._0, p^._1, p^._2, p^._7, p^._4, p^._6))
