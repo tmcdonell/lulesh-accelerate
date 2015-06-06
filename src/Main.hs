@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 -- |
@@ -29,14 +30,17 @@ import Init
 import LULESH
 import Options
 import Time
+import Timing                                           ( time )
 import Type
 import qualified Backend                                as B
 
-import Prelude                                          as P hiding ( (<*) )
-import Data.Time
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.Linear                     as A
-import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
+import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
+
+import Prelude                                          as P hiding ( (<*) )
+import Control.Exception
+import System.IO
 import Text.Printf
 
 
@@ -45,14 +49,11 @@ main = do
   (opts,_)      <- parseArgs
 
   let
-      run       = B.run (opts ^. optBackend)
+      run       = B.run  (opts ^. optBackend)
+      run3      = B.run3 (opts ^. optBackend)
       numElem   = opts ^. optSize
       numNode   = numElem + 1
       maxSteps  = constant (view optMaxSteps opts)
-
-      -- We don't have loop-invariant code motion. This forces 'x' to be
-      -- evaluated before applying it in 'f'
-      licm x f  = (id >-> f) x
 
       -- Initialise the primary data structures
       x0        = initMesh numElem
@@ -61,6 +62,8 @@ main = do
       p0        = zeros
       q0        = zeros
       ss0       = zeros
+      mN0       = initNodeMass numElem
+      v0        = initElemVolume numElem
       vrel0     = A.fill (constant (Z:.numElem:.numElem:.numElem)) 1
       zeros     = A.fill (constant (Z:.numElem:.numElem:.numElem)) 0
       dt0       = unit 1.0e-7
@@ -68,24 +71,23 @@ main = do
       n0        = unit 0
 
       initial :: Acc Domain
-      initial = lift (x0, dx0, e0, p0, q0, vrel0, ss0, t0, dt0, n0)
+      initial = lift (x0, dx0, e0, p0, q0, vrel0, ss0, (t0, dt0, n0))
 
-      -- Timestep to solution
-      continue :: Acc Domain -> Acc (Scalar Bool)
-      continue domain =
-        let (_, _, _, _, _, _, _, t, _, n) = unlift domain      :: (Acc (Field Position), Acc (Field Velocity), Acc (Field Energy), Acc (Field Pressure), Acc (Field Viscosity), Acc (Field Volume), Acc (Field R), Acc (Scalar Time), Acc (Scalar Time), Acc (Scalar Int))
-        in  A.zipWith (&&*)
-              (A.map (<* t_end parameters) t)
-              (A.map (<* maxSteps)         n)
-
-      lulesh :: Acc Domain
-      lulesh =
-        licm (initElemVolume numElem) $ \v0  ->
-        licm (initNodeMass numElem)   $ \mN0 ->
+      lulesh :: Acc (Field Volume)
+             -> Acc (Field Mass)
+             -> Acc Domain
+             -> Acc Domain
+      lulesh v0 mN0 dom0 =
           awhile
-            continue
-            (\(unlift -> (x, dx, e, p, q, v, ss, t, dt, n)) ->
+            -- loop condition
+            (\domain -> A.zipWith (&&*) (A.map (<* t_end parameters) (domain^._7._0))
+                                        (A.map (<* maxSteps)         (domain^._7._2)))
+            -- loop body
+            (\domain ->
                 let
+                    (x, dx, e, p, q, v, ss, r) = unlift domain
+                    (t, dt, n)                 = unlift (r :: Acc (Scalar Time, Scalar Time, Scalar Int))
+
                     (x', dx', e', p', q', v', ss', dtc, dth)
                         = lagrangeLeapFrog parameters (the dt) x dx e p q v v0 ss v0 mN0
 
@@ -94,20 +96,25 @@ main = do
 
                     n'  = A.map (+1) n
                 in
-                lift (x', dx', e', p', q', v', ss', t', dt', n'))
-            initial
-
-      (_, _, e, _, _, _, _, _, _, n) = run lulesh
+                lift (x', dx', e', p', q', v', ss', (t', dt', n')))
+            dom0
 
   printf "Running problem size     : %d^3\n" numElem
-  printf "Total number of elements : %d\n" (numElem * numElem * numElem)
+  printf "Total number of elements : %d\n\n" (numElem * numElem * numElem)
 
-  t1 <- getCurrentTime
-  e `seq` return ()
-  t2 <- getCurrentTime
+  printf "Initialising accelerate...            " >> hFlush stdout
+  (compute, t1)         <- time (evaluate $ run3 lulesh)
+  print t1
 
-  printf "Elapsed time: %s\n\n" (show (diffUTCTime t2 t1))
+  printf "Initialising data...                  " >> hFlush stdout
+  ((v0,m0,dom0), t2)    <- time (evaluate $ run (lift (v0, mN0, initial)))
+  print t2
+
+  printf "Running simulation...                 " >> hFlush stdout
+  (result, t3)          <- time (evaluate $ compute v0 m0 dom0)
+  print t3
+
   printf "Run completed\n"
-  printf "   Iteration count     : %d\n"   (n `indexArray` Z)
-  printf "   Final origin energy : %.6e\n" (e `indexArray` (Z:.0:.0:.0))
+  printf "   Iteration count     : %d\n"   ((result^._7._2) `indexArray` Z)
+  printf "   Final origin energy : %.6e\n" ((result^._2)    `indexArray` (Z:.0:.0:.0))
 

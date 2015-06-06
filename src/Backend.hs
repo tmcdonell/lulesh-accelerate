@@ -1,12 +1,13 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns        #-}
 
-module Backend
-  where
+module Backend where
 
 import Control.Lens
 import System.Console.GetOpt
 
-import Data.Array.Accelerate
+import Data.Array.Accelerate                            as A
 import qualified Data.Array.Accelerate.Interpreter      as Interp
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA             as CUDA
@@ -80,6 +81,19 @@ run1 CPU         f = CPU.run1 f
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run1 PTX         f = PTX.run1 f
 #endif
+
+
+run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
+run2 backend f = \x y -> run1 backend (A.uncurry f) (x, y)
+
+run3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d)
+     => Backend
+     -> (Acc a -> Acc b -> Acc c -> Acc d)
+     -> a -> b -> c -> d
+run3 backend f = \x y z -> run1 backend f' (x, y, z)
+  where
+    f' :: Acc (a, b, c) -> Acc d
+    f' (unlift -> (x',y',z')) = f x' y' z'
 
 
 -- | The set of available backnds. This will be used for both the command line

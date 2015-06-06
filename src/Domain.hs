@@ -15,10 +15,8 @@ type Domain =
     , Field Pressure
     , Field Viscosity
     , Field Volume
-    , Field R                   -- sound speed
-    , Scalar Time               -- simulation time
-    , Scalar Time               -- current dt
-    , Scalar Int                -- iteration count
+    , Field SoundSpeed
+    , (Scalar Time, Scalar Time, Scalar Int)    -- (simulation time, delta t, iteration count)
     )
 
 data Parameters = Parameters
