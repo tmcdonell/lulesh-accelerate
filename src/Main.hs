@@ -35,6 +35,7 @@ import Type
 import qualified Backend                                as B
 
 import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate.Array.Sugar                as S
 import Data.Array.Accelerate.Linear                     as A
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
 
@@ -112,9 +113,32 @@ main = do
 
   printf "Running simulation...                 " >> hFlush stdout
   (result, t3)          <- time (evaluate $ compute v0 m0 dom0)
-  print t3
+  printf "%s\n\n" (show t3)
+
+  let energy     = result ^._2
+      iterations = result ^._7._2
+      sh         = arrayShape energy
 
   printf "Run completed\n"
-  printf "   Iteration count     : %d\n"   ((result^._7._2) `indexArray` Z)
-  printf "   Final origin energy : %.6e\n" ((result^._2)    `indexArray` (Z:.0:.0:.0))
+  printf "   Iteration count     : %d\n"     (iterations `indexArray` Z)
+  printf "   Final origin energy : %.6e\n\n" (energy     `indexArray` (Z:.0:.0:.0))
+
+  let go !j !k !maxRelDiff !maxAbsDiff !totalAbsDiff
+        | j >= numElem  = (maxRelDiff, maxAbsDiff, totalAbsDiff)
+        | k >= numElem  = go (j+1) (j+2) maxRelDiff maxAbsDiff totalAbsDiff
+        | otherwise     =
+            let x       = energy `indexArray` S.fromIndex sh (j * numElem + k)
+                y       = energy `indexArray` S.fromIndex sh (k * numElem + j)
+
+                diff    = abs (x - y)
+                rel     = diff / y
+            in
+            go j (k+1) (maxRelDiff `max` rel) (maxAbsDiff `max` diff) (totalAbsDiff + diff)
+
+      (relDiff, absDiff, totalDiff) = go 0 1 0 0 0
+
+  printf "Testing Plane 0 of Energy Array\n"
+  printf "   Maximum relative difference : %.6e\n" relDiff
+  printf "   Maximum absolute difference : %.6e\n" absDiff
+  printf "   Total absolute difference   : %.6e\n" totalDiff
 
