@@ -41,12 +41,7 @@ Flag llvm-gpu
 
 Executable accelerate-lulesh
   main-is:              Main.hs
-  other-modules:
-      Backend
-      Domain
-      Init
-      LULESH
-      Util
+  other-modules:        Backend Domain Init LULESH Options Timing Type Util
 
   ghc-options:          -O2 -Wall -threaded
   hs-source-dirs:       src
