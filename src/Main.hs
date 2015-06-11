@@ -100,9 +100,12 @@ main = do
                 lift (x', dx', e', p', q', v', ss', (t', dt', n')))
             dom0
 
+  -- Problem description
   printf "Running problem size     : %d^3\n" numElem
   printf "Total number of elements : %d\n\n" (numElem * numElem * numElem)
 
+  -- Initialise the accelerate computation.
+  -- This forces front-end optimisation as well as backend compilation.
   printf "Initialising accelerate...            " >> hFlush stdout
   ((compute,(v,mN,dom)), t1) <- time $
       let go                 = run3 backend lulesh
@@ -113,19 +116,17 @@ main = do
       r `seq` return (go, (v, mN, dom))
   print t1
 
+  -- Run the simulation proper
   printf "Running simulation...                 " >> hFlush stdout
   (result, t3)          <- time (evaluate $ compute v mN dom)
   printf "%s\n\n" (show t3)
 
-  let energy     = result ^._2
-      iterations = result ^._7._2
-      sh         = arrayShape energy
+  -- Results
+  let energy            = result ^._2
+      iterations        = result ^._7._2
+      sh                = arrayShape energy
 
-  printf "Run completed\n"
-  printf "   Iteration count     : %d\n"     (iterations `indexArray` Z)
-  printf "   Final origin energy : %.6e\n\n" (energy     `indexArray` (Z:.0:.0:.0))
-
-  let go !j !k !maxRelDiff !maxAbsDiff !totalAbsDiff
+      go !j !k !maxRelDiff !maxAbsDiff !totalAbsDiff
         | j >= numElem  = (maxRelDiff, maxAbsDiff, totalAbsDiff)
         | k >= numElem  = go (j+1) (j+2) maxRelDiff maxAbsDiff totalAbsDiff
         | otherwise     =
@@ -138,6 +139,10 @@ main = do
             go j (k+1) (maxRelDiff `max` rel) (maxAbsDiff `max` diff) (totalAbsDiff + diff)
 
       (relDiff, absDiff, totalDiff) = go 0 1 0 0 0
+
+  printf "Run completed\n"
+  printf "   Iteration count     : %d\n"     (iterations `indexArray` Z)
+  printf "   Final origin energy : %.6e\n\n" (energy     `indexArray` (Z:.0:.0:.0))
 
   printf "Testing Plane 0 of Energy Array\n"
   printf "   Maximum relative difference : %.6e\n" relDiff
