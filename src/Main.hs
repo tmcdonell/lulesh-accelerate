@@ -30,7 +30,6 @@ import Domain
 import Init
 import LULESH
 import Options
-import Time
 import Timing                                           ( time )
 import Type
 
