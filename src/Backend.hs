@@ -1,4 +1,6 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
 
@@ -71,29 +73,37 @@ run PTX         = PTX.run
 
 
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
-run1 Interpreter f = Interp.run1 f
+run1 Interpreter = Interp.run1
 #ifdef ACCELERATE_CUDA_BACKEND
-run1 CUDA        f = CUDA.run1 f
+run1 CUDA        = CUDA.run1
 #endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
-run1 CPU         f = CPU.run1 f
+run1 CPU         = CPU.run1
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
-run1 PTX         f = PTX.run1 f
+run1 PTX         = PTX.run1
 #endif
 
 
 run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
-run2 backend f = \x y -> run1 backend (A.uncurry f) (x, y)
+run2 backend f =
+  let !go = run1 backend (A.uncurry f)
+  in \x y -> go (x, y)
 
 run3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d)
      => Backend
      -> (Acc a -> Acc b -> Acc c -> Acc d)
      -> a -> b -> c -> d
-run3 backend f = \x y z -> run1 backend f' (x, y, z)
-  where
-    f' :: Acc (a, b, c) -> Acc d
-    f' (unlift -> (x',y',z')) = f x' y' z'
+run3 backend f =
+  let !go = run1 backend (uncurry3 f)
+  in  \x y z -> go (x, y, z)
+
+uncurry3
+    :: Unlift f (f a, f b, f c)
+    => (f a -> f b -> f c -> f d)
+    -> f (Plain (f a), Plain (f b), Plain (f c))
+    -> f d
+uncurry3 f argv = let (a, b, c) = unlift argv in f a b c
 
 
 -- | The set of available backnds. This will be used for both the command line

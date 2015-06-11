@@ -25,6 +25,7 @@
 
 module Main where
 
+import Backend
 import Domain
 import Init
 import LULESH
@@ -32,7 +33,6 @@ import Options
 import Time
 import Timing                                           ( time )
 import Type
-import qualified Backend                                as B
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.Array.Sugar                as S
@@ -49,9 +49,7 @@ main :: IO ()
 main = do
   (opts,_)      <- parseArgs
 
-  let
-      run       = B.run  (opts ^. optBackend)
-      run3      = B.run3 (opts ^. optBackend)
+  let backend   = opts ^. optBackend
       numElem   = opts ^. optSize
       numNode   = numElem + 1
       maxSteps  = constant (view optMaxSteps opts)
@@ -71,6 +69,9 @@ main = do
       t0        = unit 0
       n0        = unit 0
 
+      elapsed   = view (_7._0)
+      iteration = view (_7._2)
+
       initial :: Acc Domain
       initial = lift (x0, dx0, e0, p0, q0, vrel0, ss0, (t0, dt0, n0))
 
@@ -81,8 +82,8 @@ main = do
       lulesh v0 mN0 dom0 =
           awhile
             -- loop condition
-            (\domain -> A.zipWith (&&*) (A.map (<* t_end parameters) (domain^._7._0))
-                                        (A.map (<* maxSteps)         (domain^._7._2)))
+            (\domain -> A.zipWith (&&*) (A.map (<* t_end parameters) (elapsed domain))
+                                        (A.map (<* maxSteps)         (iteration domain)))
             -- loop body
             (\domain ->
                 let
@@ -104,15 +105,17 @@ main = do
   printf "Total number of elements : %d\n\n" (numElem * numElem * numElem)
 
   printf "Initialising accelerate...            " >> hFlush stdout
-  (compute, t1)         <- time (evaluate $ run3 lulesh)
+  ((compute,(v,mN,dom)), t1) <- time $
+      let go                 = run3 backend lulesh
+          (v, mN, dom)       = run backend $ lift (v0, mN0, initial)
+          nop                = run backend $ unit (t_end parameters)
+          r                  = go v mN (dom & (_7._0) .~ nop)
+      in
+      r `seq` return (go, (v, mN, dom))
   print t1
 
-  printf "Initialising data...                  " >> hFlush stdout
-  ((v0,m0,dom0), t2)    <- time (evaluate $ run (lift (v0, mN0, initial)))
-  print t2
-
   printf "Running simulation...                 " >> hFlush stdout
-  (result, t3)          <- time (evaluate $ compute v0 m0 dom0)
+  (result, t3)          <- time (evaluate $ compute v mN dom)
   printf "%s\n\n" (show t3)
 
   let energy     = result ^._2
