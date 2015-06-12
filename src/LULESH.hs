@@ -22,10 +22,11 @@ import Domain
 import Type
 import Util
 
-import Prelude                                          as P hiding ( (<*) )
+import Data.Foldable                                    as F
 import Data.Array.Accelerate                            as A hiding ( transpose )
 import Data.Array.Accelerate.Linear                     as L hiding ( Epsilon )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
+import Prelude                                          as P hiding ( (<*) )
 
 
 -- Lagrange Leapfrog Algorithm
@@ -434,9 +435,9 @@ calcFBHourglassForceForElem Parameters{..} x dx determ dv ss mZ =
       -- transpose x !*! gamma
       hourmod :: Exp (M34 R)
       hourmod = lift $
-        V3 (P.sum $ P.zipWith (*^) (x ^.. (each._x)) (gamma ^.. each))
-           (P.sum $ P.zipWith (*^) (x ^.. (each._y)) (gamma ^.. each))
-           (P.sum $ P.zipWith (*^) (x ^.. (each._z)) (gamma ^.. each))
+        V3 (F.sum $ P.zipWith (*^) (x ^.. (each._x)) (gamma ^.. each))
+           (F.sum $ P.zipWith (*^) (x ^.. (each._y)) (gamma ^.. each))
+           (F.sum $ P.zipWith (*^) (x ^.. (each._z)) (gamma ^.. each))
 
       -- Compute hourglass modes
       hourgam :: Exp (Hexahedron (V4 R))
@@ -471,10 +472,10 @@ calcElemFBHourglassForce coefficient dx hourgam =
   let
       -- transpose hourgam !*! dx
       h00, h01, h02, h03 :: Exp (V3 R)
-      h00 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._x)) (dx ^.. each)
-      h01 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._y)) (dx ^.. each)
-      h02 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._z)) (dx ^.. each)
-      h03 = P.sum $ P.zipWith (*^) (hourgam ^.. (each._w)) (dx ^.. each)
+      h00 = F.sum $ P.zipWith (*^) (hourgam ^.. (each._x)) (dx ^.. each)
+      h01 = F.sum $ P.zipWith (*^) (hourgam ^.. (each._y)) (dx ^.. each)
+      h02 = F.sum $ P.zipWith (*^) (hourgam ^.. (each._z)) (dx ^.. each)
+      h03 = F.sum $ P.zipWith (*^) (hourgam ^.. (each._w)) (dx ^.. each)
 
       hh :: Exp (M43 R)
       hh  = lift (V4 h00 h01 h02 h03)
@@ -683,7 +684,7 @@ calcKinematicsForElem dt x dx v v0 =
       d         = calcElemVelocityGradient dx b det
 
       -- calculate the deviatoric strain rate tensor
-      vdov      = P.sum (unlift d :: V3 (Exp R))        -- TLM: no Foldable instance for (Exp V3) ):
+      vdov      = F.sum (unlift d :: V3 (Exp R))        -- TLM: no Foldable instance for (Exp V3) ):
       _strain   = d ^- (vdov / 3.0)
   in
   lift (v', dv', vdov, arealg)
