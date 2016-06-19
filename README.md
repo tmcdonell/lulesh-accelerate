@@ -1,4 +1,4 @@
-Accelerate-LULESH
+LULESH-Accelerate
 =================
 
 Implementation of the Livermore Unstructured Lagrangian Explicit Shock
