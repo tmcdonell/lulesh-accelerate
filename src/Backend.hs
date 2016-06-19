@@ -6,6 +6,7 @@
 
 module Backend where
 
+import Prelude                                          as P
 import Control.Lens
 import System.Console.GetOpt
 
@@ -34,7 +35,7 @@ data Backend = Interpreter
 #ifdef ACCELERATE_CUDA_BACKEND
              | CUDA
 #endif
-  deriving (Eq, Bounded)
+  deriving (P.Eq, P.Bounded)
 
 -- | The default backend to use
 --

@@ -896,8 +896,8 @@ calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov 
       get :: Exp Int -> Exp Int -> Exp Int -> Exp (Gradient Velocity)
       get z y x =
         if x >=* numElem ||* y >=* numElem ||* z >=* numElem
-           then zero                                            -- external face
-           else grad_v ! index3 (max 0 z) (max 0 y) (max 0 x)   -- internal region
+           then zero                                                -- external face
+           else grad_v ! index3 (A.max 0 z) (A.max 0 y) (A.max 0 x) -- internal region
 
       -- Calculate one component of the phi term
       --
@@ -909,7 +909,7 @@ calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov 
             r'  = r * ic
             phi = 0.5 * (l' + r')
         in
-        (l' * monoq_max_slope) `min` phi `min` (r' * monoq_max_slope) `max` 0 `min` monoq_limiter
+        (l' * monoq_max_slope) `A.min` phi `A.min` (r' * monoq_max_slope) `A.max` 0 `A.min` monoq_limiter
 
       -- Calculate linear and quadratic terms for viscosity
       --
@@ -923,7 +923,7 @@ calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov 
             -- remove length scale
             dx          = grad_x ! ix
             dv          = grad_v ! ix
-            dvx         = lift1 (fmap (min 0) :: V3 (Exp R) -> V3 (Exp R)) (dx * dv)
+            dvx         = lift1 (fmap (A.min 0) :: V3 (Exp R) -> V3 (Exp R)) (dx * dv)
 
             rho         = elemMass!ix / (volRef!ix * volNew!ix)
             qlin        = -qlc_monoq * rho * dot dvx       (1 - phi)
@@ -954,8 +954,8 @@ calcEOSForElem
     -> Exp (Pressure, Energy, Viscosity, R)
 calcEOSForElem param@Parameters{..} vol delta_vol e p q ql qq =
   let
-      clamp     = (\x -> if eosvmin /=* 0 then max eosvmin x else x)
-                . (\x -> if eosvmax /=* 0 then min eosvmax x else x)
+      clamp     = (\x -> if eosvmin /=* 0 then A.max eosvmin x else x)
+                . (\x -> if eosvmax /=* 0 then A.min eosvmax x else x)
 
       vol'      = clamp vol
 
@@ -986,7 +986,7 @@ calcEnergyForElem
     -> (Exp Energy, Exp Pressure, Exp Viscosity, Exp R, Exp R)
 calcEnergyForElem params@Parameters{..} e0 p0 q0 ql qq comp comp_half vol vol_delta work =
   let
-      e1                = e_min `max` (e0 - 0.5 * vol_delta * (p0 + q0) + 0.5 * work)
+      e1                = e_min `A.max` (e0 - 0.5 * vol_delta * (p0 + q0) + 0.5 * work)
       (p1, bvc1, pbvc1) = calcPressureForElem params e1 vol comp_half
       ssc1              = calcSoundSpeedForElem params (1/(1+comp_half)) e1 p1 bvc1 pbvc1
       q1                = vol_delta >* 0 ? (0, ssc1 * ql + qq )
@@ -995,7 +995,7 @@ calcEnergyForElem params@Parameters{..} e0 p0 q0 ql qq comp comp_half vol vol_de
                                 + 0.5 * vol_delta * (3.0 * (p0 + q0) - 4.0 * (p1 + q1))
                                 + 0.5 * work
                           in
-                          abs e <* e_cut ? (0, max e_min e )
+                          abs e <* e_cut ? (0, A.max e_min e )
       (p2, bvc2, pbvc2) = calcPressureForElem params e2 vol comp
       ssc2              = calcSoundSpeedForElem params vol e2 p2 bvc2 pbvc2
       q2                = vol_delta >* 0 ? (0, ssc2 * ql + qq)
@@ -1004,7 +1004,7 @@ calcEnergyForElem params@Parameters{..} e0 p0 q0 ql qq comp comp_half vol vol_de
                                                          - 8.0 * (p1 + q1)
                                                          +       (p2 + q2) )
                           in
-                          abs e <* e_cut ? (0, max e_min e)
+                          abs e <* e_cut ? (0, A.max e_min e)
       (p3, bvc3, pbvc3) = calcPressureForElem params e3 vol comp
       ssc3              = calcSoundSpeedForElem params vol e3 p3 bvc3 pbvc3
       q3                = let q = ssc3 * ql + qq
@@ -1034,7 +1034,7 @@ calcPressureForElem Parameters{..} e vol comp =
                      then 0
                      else p_new
   in
-  ( max p_min p_new', bvc, pbvc )
+  ( A.max p_min p_new', bvc, pbvc )
 
 
 -- | Calculate the speed of sound in each element
@@ -1169,7 +1169,7 @@ timeIncrement' Parameters{..} t_now dt_old dt_courant dt_hydro =
                      else dt_end
 
       -- increment the previous timestep by a small amount
-      step      = min dt_new dt_max
+      step      = A.min dt_new dt_max
 
       c1        = 1.0e20
       c2        = if dt_courant <* c1 then 0.5 * dt_courant else c1
@@ -1183,7 +1183,7 @@ timeIncrement' Parameters{..} t_now dt_old dt_courant dt_hydro =
                 c3
 
       -- compute timestep and the new simulation time
-      dt'       = min step target
+      dt'       = A.min step target
       t_now'    = t_now + dt'
   in
   lift (t_now', dt')

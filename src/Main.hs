@@ -136,7 +136,7 @@ main = do
                 diff    = abs (x - y)
                 rel     = diff / y
             in
-            go j (k+1) (maxRelDiff `max` rel) (maxAbsDiff `max` diff) (totalAbsDiff + diff)
+            go j (k+1) (maxRelDiff `P.max` rel) (maxAbsDiff `P.max` diff) (totalAbsDiff + diff)
 
       (relDiff, absDiff, totalDiff) = go 0 1 0 0 0
 

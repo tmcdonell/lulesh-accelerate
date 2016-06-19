@@ -5,7 +5,6 @@ module Init where
 
 import Options
 import Type
-import Util
 
 import Prelude                                  as P hiding ( (<*) )
 import Data.Array.Accelerate                    as A

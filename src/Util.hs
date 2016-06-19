@@ -13,13 +13,6 @@ import Data.Array.Accelerate                            as A hiding ( transpose 
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
 
--- Use rebindable syntax to improve readability of branches in scalar code.
---
-ifThenElse :: Elt t => Exp Bool -> Exp t -> Exp t -> Exp t
-ifThenElse x y z
-  = x ? (y, z)
-
-
 -- | Get the values at the nodes surrounding the element of a given index. This
 -- follows the numbering convention:
 --
