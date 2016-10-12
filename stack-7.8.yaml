@@ -8,17 +8,17 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: ed0efd5ac4309ef0e0fdad9ba23588df179bf469
+    commit: 82a8f98966eb69bcace1d5704f3ae2d24eae8923
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: f70211c167db0dfb70375e82f69273a6354e6ede
+    commit: ee9c4c13e9ef5d364f476f97c5ced05645d0a919
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 2c26ca7755a3f5acc3a56dd0f4a23565ba620501
+    commit: d7e74db03f86cfe02809853635c85341a824fb7f
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -32,22 +32,24 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: 114c1dae1aba7b2da83d5c6e811d73059297abfc
+    commit: ef2816690dea99ce95da844d81dd4aa1b2328f50
   extra-dep: true
 
-- location:
-    git:    https://github.com/tmcdonell/cuda.git
-    commit: 5bb5795e2bbf3d12cff55ed6fc82e2320d6aff03
-  extra-dep: true
+# - location:
+#     git:    https://github.com/tmcdonell/cuda.git
+#     commit: 5bb5795e2bbf3d12cff55ed6fc82e2320d6aff03
+#   extra-dep: true
 
 extra-deps:
 - 'atomic-primops-0.8.0.2'
 - 'base-orphans-0.4.4'
 - 'chaselev-deque-0.5.0.5'
+- 'cuda-0.7.5.0'
 - 'libffi-0.1'
 - 'llvm-general-3.4.6.0'
 - 'llvm-general-pure-3.4.5.4'
 - 'mtl-2.2.1'
+- 'nvvm-0.7.5.0'
 - 'SafeSemaphore-0.10.1'
 - 'transformers-0.4.3.0'
 - 'transformers-compat-0.4.0.4'
@@ -67,7 +69,7 @@ flags:
     debug: true
   accelerate-llvm-ptx:
     debug: true
-    libnvvm: false
+    nvvm: false
   lulesh-accelerate:
     cuda: true
     llvm-cpu: true
