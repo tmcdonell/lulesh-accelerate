@@ -40,11 +40,18 @@ Flag llvm-gpu
 
 
 Executable lulesh-accelerate
+  hs-source-dirs:       src
   main-is:              Main.hs
   other-modules:        Backend Domain Init LULESH Options Timing Type Util
 
-  ghc-options:          -O2 -Wall -threaded -rtsopts -fcontext-stack=30
-  hs-source-dirs:       src
+  ghc-options:          -O2
+                        -Wall
+                        -threaded
+                        -rtsopts
+                        -fcontext-stack=30
+                        -with-rtsopts=-n2M
+                        -with-rtsopts=-A64M
+
   default-language:     Haskell2010
   build-depends:
       base                      >= 4.6
