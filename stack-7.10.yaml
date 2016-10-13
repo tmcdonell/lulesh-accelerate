@@ -8,17 +8,17 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 82a8f98966eb69bcace1d5704f3ae2d24eae8923
+    commit: 3e0ea9b2138bc4575b0a570b6e0f6f8dfad47695
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: ee9c4c13e9ef5d364f476f97c5ced05645d0a919
+    commit: 4192d4f573326ce49e7145570c5c54716f992f15
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: d7e74db03f86cfe02809853635c85341a824fb7f
+    commit: a48fbc77908df54997855c9035b338d28c91d1d3
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -32,13 +32,8 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: ef2816690dea99ce95da844d81dd4aa1b2328f50
+    commit: e2eda8c657d207bfc888780b505ff5fdfdf20bb5
   extra-dep: true
-
-# - location:
-#     git:    https://github.com/tmcdonell/cuda.git
-#     commit: 5bb5795e2bbf3d12cff55ed6fc82e2320d6aff03
-#   extra-dep: true
 
 extra-deps:
 - 'chaselev-deque-0.5.0.5'
