@@ -16,7 +16,8 @@ type Domain =
     , Field Viscosity
     , Field Volume
     , Field SoundSpeed
-    , (Scalar Time, Scalar Time, Scalar Int)    -- (simulation time, delta t, iteration count)
+    , Scalar Time                 -- current simulation time
+    , Scalar Time                 -- delta t
     )
 
 data Parameters = Parameters
@@ -33,7 +34,7 @@ data Parameters = Parameters
 
   , dt_scaling          :: (Exp R, Exp R)
   , dt_max              :: Exp R                -- maximum allowable time increment
-  , t_end               :: Exp R                -- end time of the simulation
+  , t_end               :: R                    -- end time of the simulation
 
     -- Other constants
     -- ---------------

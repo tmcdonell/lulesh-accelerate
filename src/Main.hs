@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP          #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 -- |
 -- Module       : Main
 -- Copyright    : [2015] Trevor L. McDonell
@@ -32,6 +32,7 @@ import LULESH
 import Options
 import Timing                                           ( time )
 import Type
+import VisIt
 
 import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.Array.Sugar                as S
@@ -39,7 +40,6 @@ import Data.Array.Accelerate.Linear                     as A
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
 
 import Prelude                                          as P hiding ( (<*) )
-import Control.Exception
 import System.IO
 import Text.Printf
 
@@ -51,7 +51,7 @@ main = do
   let backend   = opts ^. optBackend
       numElem   = opts ^. optSize
       numNode   = numElem + 1
-      maxSteps  = constant (view optMaxSteps opts)
+      maxSteps  = view optMaxSteps opts
 
       -- Initialise the primary data structures
       x0        = initMesh numElem
@@ -66,14 +66,39 @@ main = do
       zeros     = A.fill (constant (Z:.numElem:.numElem:.numElem)) 0
       dt0       = unit 1.0e-7
       t0        = unit 0
-      n0        = unit 0
 
-      elapsed   = view (_7._0)
-      iteration = view (_7._2)
+      write     = case opts ^. optOutputPath of
+                    Nothing -> \_ _   -> return ()
+                    Just p  -> \i dom -> writeDomain p i dom
 
       initial :: Acc Domain
-      initial = lift (x0, dx0, e0, p0, q0, vrel0, ss0, (t0, dt0, n0))
+      initial = lift (x0, dx0, e0, p0, q0, vrel0, ss0, t0, dt0)
 
+      step :: Acc Domain -> Acc Domain
+      step domain =
+        let
+            (x, dx, e, p, q, v, ss, t, dt) = unlift domain
+
+            (x', dx', e', p', q', v', ss', dtc, dth)
+                = lagrangeLeapFrog parameters (the dt) x dx e p q v v0 ss v0 mN0
+
+            (t', dt')
+                = timeIncrement parameters t dt dtc dth
+        in
+        lift (x', dx', e', p', q', v', ss', t', dt')
+
+      simulate :: Int -> Domain -> IO (Domain, Int)
+      simulate !i !dom@(_, _, _, _, _, _, _, t, _)
+        | i                >= maxSteps         = return (dom, i)
+        | t `indexArray` Z >= t_end parameters = return (dom, i)
+        | otherwise                            = do
+            let !dom' = go dom
+            write i dom
+            simulate (i+1) dom'
+        where
+          go = run1 backend step
+
+{--
       lulesh :: Acc (Field Volume)
              -> Acc (Field Mass)
              -> Acc Domain
@@ -81,8 +106,9 @@ main = do
       lulesh v0 mN0 dom0 =
           awhile
             -- loop condition
-            (\domain -> A.zipWith (&&*) (A.map (<* t_end parameters) (elapsed domain))
-                                        (A.map (<* maxSteps)         (iteration domain)))
+            undefined
+            -- (\domain -> A.zipWith (&&*) (A.map (<* t_end parameters)  (elapsed domain))
+            --                             (A.map (<* constant maxSteps) (iteration domain)))
             -- loop body
             (\domain ->
                 let
@@ -99,31 +125,31 @@ main = do
                 in
                 lift (x', dx', e', p', q', v', ss', (t', dt', n')))
             dom0
+--}
 
   -- Problem description
+  --
   printf "Running problem size     : %d^3\n" numElem
   printf "Total number of elements : %d\n\n" (numElem * numElem * numElem)
 
-  -- Initialise the accelerate computation.
-  -- This forces front-end optimisation as well as backend compilation.
+  -- Initialise the accelerate computation by performing a single step
+  --
   printf "Initialising accelerate...            " >> hFlush stdout
-  ((compute,(v,mN,dom)), t1) <- time $
-      let go                 = run3 backend lulesh
-          (v, mN, dom)       = run backend $ lift (v0, mN0, initial)
-          nop                = run backend $ unit (t_end parameters)
-          r                  = go v mN (dom & (_7._0) .~ nop)
-      in
-      r `seq` return (go, (v, mN, dom))
+  (dom0, t1) <- time $ do
+    let dom0 = run backend initial
+    r <- simulate (maxSteps-1) dom0
+    r `seq` return dom0
   print t1
 
-  -- Run the simulation proper
+  -- Run the simulation proper...
+  --
   printf "Running simulation...                 " >> hFlush stdout
-  (result, t3)          <- time (evaluate $ compute v mN dom)
-  printf "%s\n\n" (show t3)
+  ((result, iterations), t2) <- time $ simulate 0 dom0
+  printf "%s\n\n" (show t2)
 
-  -- Results
+  -- Final results summary
+  --
   let energy            = result ^._2
-      iterations        = result ^._7._2
       sh                = arrayShape energy
 
       go !j !k !maxRelDiff !maxAbsDiff !totalAbsDiff
@@ -132,7 +158,7 @@ main = do
         | otherwise     =
             let x       = energy `indexArray` S.fromIndex sh (j * numElem + k)
                 y       = energy `indexArray` S.fromIndex sh (k * numElem + j)
-
+                --
                 diff    = abs (x - y)
                 rel     = diff / y
             in
@@ -141,8 +167,8 @@ main = do
       (relDiff, absDiff, totalDiff) = go 0 1 0 0 0
 
   printf "Run completed\n"
-  printf "   Iteration count     : %d\n"     (iterations `indexArray` Z)
-  printf "   Final origin energy : %.6e\n\n" (energy     `indexArray` (Z:.0:.0:.0))
+  printf "   Iteration count     : %d\n"     iterations
+  printf "   Final origin energy : %.6e\n\n" (energy `indexArray` (Z:.0:.0:.0))
 
   printf "Testing Plane 0 of Energy Array\n"
   printf "   Maximum relative difference : %.6e\n" relDiff

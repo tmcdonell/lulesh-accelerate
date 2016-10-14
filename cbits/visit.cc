@@ -169,6 +169,7 @@ extern "C" void writeDomain
 
   if (db) {
     writeDomainDB(db, numElem, step, time, x, y, z, xd, yd, zd, e, p, v, q);
+    DBClose(db);
   }
   else {
     printf("Error creating output file\n");

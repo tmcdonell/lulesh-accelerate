@@ -1160,7 +1160,7 @@ timeIncrement'
     -> Exp (Time, Time)         -- (simulation time, timestep)
 timeIncrement' Parameters{..} t_now dt_old dt_courant dt_hydro =
   let
-      dt_end    = t_end - t_now
+      dt_end    = constant t_end - t_now
       (lb,ub)   = dt_scaling
 
       -- try to prevent very small scaling on the next cycle

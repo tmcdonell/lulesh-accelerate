@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP                      #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
 module VisIt where
 
@@ -19,11 +20,11 @@ import Foreign.Ptr
 -- visualisation program. The input file path should have space (via %d) to
 -- write the simulation step as part of the name.
 --
-writeDomain :: FilePath -> Domain -> IO ()
+writeDomain :: FilePath -> Int -> Domain -> IO ()
 #ifndef ACCELERATE_VISIT
-writeDomain _ _ = error "visualisation is not enabled: recompile with -fvisit"
+writeDomain _ _ _ = error "visualisation is not enabled: recompile with -fvisit"
 #else
-writeDomain basename domain =
+writeDomain basename step domain =
   withCString name $ \c_name -> do
     c_writeDomain c_name
                   (fromIntegral numElem)
@@ -49,8 +50,7 @@ writeDomain basename domain =
   where
     name            = printf basename step
 
-    elapsed         = (domain ^._7._0) ! Z
-    step            = (domain ^._7._2) ! Z
+    elapsed         = (domain^._7) ! Z
 
     (_,numElem)     = s
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP             #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Options
@@ -23,7 +24,7 @@ data Options = Options
 --  , _optNumRegions      :: Int                  -- number of distinct regions
 --  , _optBalance         :: Int                  -- load balance between regions of a domain
 --  , _optCost            :: Int                  -- extra cost of more expensive regions
-  , _optOutputFile      :: Maybe FilePath       -- output viz files
+  , _optOutputPath      :: Maybe FilePath       -- output simulation state suitable for visualisation
   , _optProgress        :: Bool                 -- print out progress
   , _optHelp            :: Bool                 -- print help message
   }
@@ -51,7 +52,7 @@ defaultOptions = Options
 --  , _optNumRegions      = 11
 --  , _optBalance         = 1
 --  , _optCost            = 1
-  , _optOutputFile      = Nothing
+  , _optOutputPath      = Nothing
   , _optProgress        = False
   , _optHelp            = False
   }
@@ -69,9 +70,11 @@ options =
             (ReqArg (set optMaxSteps . read) "INT")
             "maximum number of iterations to run"
 
+#ifdef ACCELERATE_VISIT
   , Option  []  ["output"]
-            (ReqArg (set optOutputFile . Just) "FILE")
-            "path to output VisIt files"
+            (ReqArg (set optOutputPath . Just) "FILE")
+            "base name to output VisIt files"
+#endif
 
   , Option  []  ["progress"]
             (NoArg (set optProgress True))
