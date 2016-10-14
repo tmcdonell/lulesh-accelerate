@@ -38,6 +38,10 @@ Flag llvm-gpu
   Description:          Enable the LLVM backend for NVIDIA CPUs
   Default:              False
 
+Flag visit
+  Description:          Enable writing output files suitable for visualisation
+  Default:              False
+
 
 Executable lulesh-accelerate
   hs-source-dirs:       src
@@ -76,5 +80,11 @@ Executable lulesh-accelerate
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
         accelerate-llvm-ptx     == 2.0.*
+
+  if flag(visit)
+    CPP-options:        -DACCELERATE_VISIT
+    other-modules:      VisIt
+    c-sources:          cbits/visit.cc
+    extra-libraries:    siloh5 hdf5
 
 -- vim: nospell
