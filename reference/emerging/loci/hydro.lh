@@ -1,0 +1,128 @@
+#include <Loci.h>
+$include "FVM.lh"
+
+/* Could also support fixed point and interval arithmetic types */
+typedef float        real4 ;
+typedef double       real8 ;
+typedef long double  real10 ;  /* 10 bytes on x86 */
+
+inline real4  SQRT(real4  arg) { return sqrtf(arg) ; }
+inline real8  SQRT(real8  arg) { return sqrt(arg) ; }
+inline real10 SQRT(real10 arg) { return sqrtl(arg) ; }
+
+inline real4  CBRT(real4  arg) { return cbrtf(arg) ; }
+inline real8  CBRT(real8  arg) { return cbrt(arg) ; }
+inline real10 CBRT(real10 arg) { return cbrtl(arg) ; }
+
+inline real4  FABS(real4  arg) { return fabsf(arg) ; }
+inline real8  FABS(real8  arg) { return fabs(arg) ; }
+inline real10 FABS(real10 arg) { return fabsl(arg) ; }
+
+
+typedef real8 Real_t ;
+typedef Loci::vector3d<Real_t> vect3d ;
+
+void setup_hexahedra_map(fact_db &facts) ;
+$type hexnodes MapVec<8> ;
+//$type hexnodes multiMap ;
+$type zetap Map ;
+$type zetam Map ;
+$type etap  Map ;
+$type etam  Map ;
+$type xip   Map ;
+$type xim   Map ;
+$type zetap_map store<char> ;
+$type zetam_map store<char> ;
+$type etap_map store<char> ;
+$type etam_map store<char> ;
+$type xip_map store<char> ;
+$type xim_map store<char> ;
+
+$type elemNodes store<Loci::Array<vect3d,8> > ;
+$type elemVels  store<Loci::Array<vect3d,8> > ;
+
+$type volume store<Real_t> ;
+
+// elemental quantities
+$type volo store<Real_t> ;
+$type vnew store<Real_t> ;
+$type vhist store<Real_t> ;
+$type vdov store<Real_t> ;
+$type qq store<Real_t> ;
+$type ql store<Real_t> ;
+
+$type delx store<Loci::Array<Real_t,3> > ; // coordinate vectors zeta,eta,xi
+$type delv store<Loci::Array<Real_t,3> > ; // coordinate vectors zeta,eta,xi
+
+$type D store<vect3d> ;
+
+$type elemMass store<Real_t> ;
+$type e store<Real_t> ;
+$type e_ic store<Real_t> ;
+$type e_next store<Real_t> ;
+$type p store<Real_t> ;
+$type p_ic store<Real_t> ;
+$type p_next store<Real_t> ;
+$type q store<Real_t> ;
+$type q_ic store<Real_t> ;
+$type q_next store<Real_t> ;
+
+$type bvc store<Real_t> ;
+$type pbvc store<Real_t> ;
+$type ss store<Real_t> ;
+
+$type arealg store<Real_t> ; // element characteristic length
+
+
+$type e_cut param<Real_t> ; // energy cutoff
+$type p_cut param<Real_t> ; // pressure cutoff
+$type q_cut param<Real_t> ; // artificial dissipation cutoff
+$type u_cut param<Real_t> ; // velocity cutoff
+$type v_cut param<Real_t> ; // volume cutoff
+
+$type hgcoef param<Real_t> ; 
+$type ss4o3  param<Real_t> ;
+$type qstop  param<Real_t> ;
+$type monoq_max_slope param<Real_t> ;
+$type monoq_limiter_mult param<Real_t> ;
+$type qlc_monoq param<Real_t> ;
+$type qqc_monoq param<Real_t> ;
+$type qqc param<Real_t> ;
+
+$type pmin param<Real_t> ;
+$type emin param<Real_t> ;
+$type dvovmax param<Real_t> ;
+$type eosvmax param<Real_t> ;
+$type eosvmin param<Real_t> ;
+$type refdens param<Real_t> ;
+
+$type dt param<Real_t> ;
+$type dt_stable param<Real_t> ;
+$type dt_next param<Real_t> ;
+$type dt_ic param<Real_t> ;
+$type sim_time param<Real_t> ;
+$type stop_time param<Real_t> ;
+$type dtfixed param<Real_t> ;
+$type dtmax param<Real_t> ;
+$type deltatimemultlb param<Real_t> ;
+$type deltatimemultub param<Real_t> ;
+$type dtstart param<Real_t> ;
+$type maxsteps param<int> ;
+
+$type endSimulation param<bool> ;
+
+// Node data
+
+// node coordinates
+$type  coord store<vect3d> ; 
+$type  coord_ic store<vect3d> ;  // initial conditions
+// node velocity
+$type  vel   store<vect3d> ; 
+$type  vel_ic   store<vect3d> ; 
+$type  vel_next store<vect3d> ;
+// node force
+$type force store<vect3d> ;
+// node mass
+$type nodalMass store<Real_t> ;
+
+

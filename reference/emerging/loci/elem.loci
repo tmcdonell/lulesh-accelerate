@@ -1,0 +1,688 @@
+$include "hydro.lh"
+using namespace std ;
+using Loci::Array ;
+
+//-----------------------------------------------------------------------------
+//--
+//-- Utility Functions
+//--
+//-----------------------------------------------------------------------------
+
+// return volume and shape function derivatives
+inline Real_t
+ShapeFunctionDerivatives(Array<vect3d,8> & restrict shapeFuncDeriv,
+                         const Array<vect3d,8> &coords) {
+				       
+  // diagonal vectors
+  const vect3d e0 = coords[6]-coords[0] ;
+  const vect3d e1 = coords[5]-coords[3] ;
+  const vect3d e2 = coords[7]-coords[1] ;
+  const vect3d e3 = coords[4]-coords[2] ;
+  
+  // jacobians
+  const vect3d fjxi = 0.125*(e0+e1-e2-e3) ;
+  const vect3d fjet = 0.125*(e0-e1+e2-e3) ;
+  const vect3d fjze = 0.125*(e0+e1+e2+e3) ;
+
+  // cofactors
+  const vect3d cjxi = cross(fjet,fjze) ;
+  const vect3d cjet = cross(fjze,fjxi) ;
+  const vect3d cjze = cross(fjxi,fjet) ;
+  
+  // calculate partials:
+  // this needs only be done for l=0,1,2,3 since, by symmetry, 
+  // (6,7,4,5) = -(0,1,2,3)
+  shapeFuncDeriv[0] = -1.*cjxi-cjet-cjze ;
+  shapeFuncDeriv[1] =  cjxi-cjet-cjze ;
+  shapeFuncDeriv[2] =  cjxi+cjet-cjze ;
+  shapeFuncDeriv[3] = -1.*cjxi+cjet-cjze ;
+  shapeFuncDeriv[4] = -1.*shapeFuncDeriv[2] ;
+  shapeFuncDeriv[5] = -1.*shapeFuncDeriv[3] ;
+  shapeFuncDeriv[6] = -1.*shapeFuncDeriv[0] ;
+  shapeFuncDeriv[7] = -1.*shapeFuncDeriv[1] ;
+  
+  const Real_t vol = 8.*dot(fjet,cjet) ;
+  return vol ;
+}
+
+inline void SumElemFaceNormal(vect3d &n0,vect3d &n1, vect3d &n2, vect3d &n3,
+                              const vect3d &v0, const vect3d &v1,
+                              const vect3d &v2, const vect3d &v3) {
+
+  const vect3d bisect0 = 0.5*(v3+v2-v1-v0) ;
+  const vect3d bisect1 = 0.5*(v2+v1-v3-v0) ;
+  const vect3d area = 0.25*cross(bisect0,bisect1) ;
+  n0 += area ;
+  n1 += area ;
+  n2 += area ;
+  n3 += area ;
+}
+
+inline void ElemNodeNormals(Array<vect3d,8> & restrict pf,
+                            const Array<vect3d,8> &x) {
+  for(int i=0;i<8;++i)
+    pf[i] = vect3d(0.,0.,0.) ;
+  SumElemFaceNormal(pf[0],pf[1],pf[2],pf[3],x[0],x[1],x[2],x[3]) ;
+  SumElemFaceNormal(pf[0],pf[4],pf[5],pf[1],x[0],x[4],x[5],x[1]) ;
+  SumElemFaceNormal(pf[1],pf[5],pf[6],pf[2],x[1],x[5],x[6],x[2]) ;
+  SumElemFaceNormal(pf[2],pf[6],pf[7],pf[3],x[2],x[6],x[7],x[3]) ;
+  SumElemFaceNormal(pf[3],pf[7],pf[4],pf[0],x[3],x[7],x[4],x[0]) ;
+  SumElemFaceNormal(pf[4],pf[7],pf[6],pf[5],x[4],x[7],x[6],x[5]) ;
+}
+
+
+inline Real_t triple_product(const vect3d &v1, const vect3d &v2, const vect3d &v3) {
+  return (v1.x*(v2.y*v3.z-v2.z*v3.y) + v2.x*(v1.z*v3.y-v1.y*v3.z) +
+	  v3.x*(v1.y*v2.z-v1.z*v2.y)) ;
+}
+
+inline Real_t HexVolume(const Array<vect3d,8> &coords) {
+  const vect3d d61 = coords[6]-coords[1] ;
+  const vect3d d70 = coords[7]-coords[0] ;
+  const vect3d d63 = coords[6]-coords[3] ;
+  const vect3d d20 = coords[2]-coords[0] ;
+  const vect3d d50 = coords[5]-coords[0] ;
+  const vect3d d64 = coords[6]-coords[4] ;
+  const vect3d d31 = coords[3]-coords[1] ;
+  const vect3d d72 = coords[7]-coords[2] ;
+  const vect3d d43 = coords[4]-coords[3] ;
+  const vect3d d57 = coords[5]-coords[7] ;
+  const vect3d d14 = coords[1]-coords[4] ;
+  const vect3d d25 = coords[2]-coords[5] ;
+  const Real_t twelfth = Real_t(1.)/Real_t(12.) ;
+  
+  return twelfth*(triple_product(d31+d72,d63,d20)+
+		  triple_product(d43+d57,d64,d70)+
+		  triple_product(d14+d25,d61,d50)) ;
+}
+
+inline Real_t  AreaFace(const vect3d &v0,
+			const vect3d &v1,
+			const vect3d &v2,
+			const vect3d &v3) {
+  const vect3d f = (v2-v0)-(v3-v1) ;
+  const vect3d g = (v2-v0)+(v3-v1) ;
+  const Real_t dfg = dot(f,g) ;
+  return dot(f,f)*dot(g,g)-dfg*dfg ;
+}
+
+inline Real_t ElemCharacteristicLength(const Array<vect3d,8> &coords,
+				     const Real_t volume) {
+  Real_t charLength = Real_t(0.0) ;
+  
+  Real_t a  = 0 ;
+  a = AreaFace(coords[0],coords[1],coords[2],coords[3]) ;
+  charLength = max(a,charLength) ;
+  a = AreaFace(coords[4],coords[5],coords[6],coords[7]) ;
+  charLength = max(a,charLength) ;
+  a = AreaFace(coords[0],coords[1],coords[5],coords[4]) ;
+  charLength = max(a,charLength) ;
+  a = AreaFace(coords[1],coords[2],coords[6],coords[5]) ;
+  charLength = max(a,charLength) ;
+  a = AreaFace(coords[2],coords[3],coords[7],coords[6]) ;
+  charLength = max(a,charLength) ;
+  a = AreaFace(coords[3],coords[0],coords[4],coords[7]) ;
+  charLength = max(a,charLength) ;
+  charLength = Real_t(4.0)*volume/SQRT(charLength) ;
+  return charLength ;
+}
+
+
+inline void ElemStressToNodeForces(Array<vect3d,8> &restrict forces,
+                                   const Array<vect3d,8> & B,
+                                   const vect3d stress_diag) {
+  for(int i=0;i<8;++i) {
+    forces[i].x = -stress_diag.x*B[i].x ;
+    forces[i].y = -stress_diag.y*B[i].y ;
+    forces[i].z = -stress_diag.z*B[i].z ;
+  }
+}
+
+
+inline vect3d VoluDer(const vect3d x0, const vect3d x1, const vect3d x2,
+                      const vect3d x3, const vect3d x4, const vect3d x5) {
+  Real_t dvdx =
+    (x1.y + x2.y) * (x0.z + x1.z) - (x0.y + x1.y) * (x1.z + x2.z) +
+    (x0.y + x4.y) * (x3.z + x4.z) - (x3.y + x4.y) * (x0.z + x4.z) -
+    (x2.y + x5.y) * (x3.z + x5.z) + (x3.y + x5.y) * (x2.z + x5.z);
+  Real_t dvdy =
+    - (x1.x + x2.x) * (x0.z + x1.z) + (x0.x + x1.x) * (x1.z + x2.z) -
+    (x0.x + x4.x) * (x3.z + x4.z) + (x3.x + x4.x) * (x0.z + x4.z) +
+    (x2.x + x5.x) * (x3.z + x5.z) - (x3.x + x5.x) * (x2.z + x5.z);
+  Real_t dvdz =
+    - (x1.y + x2.y) * (x0.x + x1.x) + (x0.y + x1.y) * (x1.x + x2.x) -
+    (x0.y + x4.y) * (x3.x + x4.x) + (x3.y + x4.y) * (x0.x + x4.x) +
+    (x2.y + x5.y) * (x3.x + x5.x) - (x3.y + x5.y) * (x2.x + x5.x);
+
+  Real_t twelfth = Real_t(1.)/Real_t(12.) ;
+  return vect3d(twelfth*dvdx,twelfth*dvdy,twelfth*dvdz) ;
+}
+
+inline void CalcElemVolumeDerivative(Array<vect3d,8> & restrict dvdc,
+                                     const Array<vect3d,8> & x) {
+  dvdc[0] = VoluDer(x[1], x[2], x[3], x[4], x[5], x[7]) ;
+  dvdc[1] = VoluDer(x[2], x[3], x[0], x[5], x[6], x[4]) ;
+  dvdc[2] = VoluDer(x[3], x[0], x[1], x[6], x[7], x[5]) ;
+  dvdc[3] = VoluDer(x[0], x[1], x[2], x[7], x[4], x[6]) ;
+  dvdc[4] = VoluDer(x[7], x[6], x[5], x[0], x[3], x[1]) ;
+  dvdc[5] = VoluDer(x[4], x[7], x[6], x[1], x[0], x[2]) ;
+  dvdc[6] = VoluDer(x[5], x[4], x[7], x[2], x[1], x[3]) ;
+  dvdc[7] = VoluDer(x[6], x[5], x[4], x[3], x[2], x[0]) ;
+}
+
+inline void
+CalcElemFBHourglassForce(Array<vect3d,8> & restrict hgf,
+                         const Array<vect3d,8> & xd,
+                         const Real_t hourgam[4][8],
+                         const Real_t coefficient) {
+  vect3d hc[4] ;
+  for(int i=0;i<4;++i) {
+    hc[i] = hourgam[i][0]*xd[0] ;
+    for(int j=1;j<8;++j)
+      hc[i] += hourgam[i][j]*xd[j] ;
+  }
+  for(int i=0;i<8;++i)
+    hgf[i] = coefficient*(hc[0]*hourgam[0][i] + hc[1]*hourgam[1][i]+
+                          hc[2]*hourgam[2][i] + hc[3]*hourgam[3][i]) ;
+}
+
+static const Real_t GAMMA[4][8] = {
+  { 1.,  1., -1., -1., -1., -1., 1.,  1.},
+  { 1., -1., -1.,  1., -1.,  1., 1., -1.},
+  { 1., -1.,  1., -1.,  1., -1., 1., -1.},
+  {-1.,  1., -1.,  1.,  1., -1., 1., -1.}
+} ;
+
+inline void HourglassForce(Array<vect3d,8> & restrict hgf,
+                           const Array<vect3d,8> &x,
+                           const Array<vect3d,8> &xd,
+                           const Array<vect3d,8> &dvdc,
+                           Real_t determ,
+                           Real_t coef) {
+  Real_t hGAMMA[4][8] ;
+  Real_t volinv = 1.0/determ ;
+  for(int i=0;i<4;++i) {
+    vect3d hourmod = x[0]*GAMMA[i][0] ;
+    for(int j=1;j<8;++j)
+      hourmod += x[j]*GAMMA[i][j] ;
+    for(int j=0;j<8;++j)
+      hGAMMA[i][j] = GAMMA[i][j] - volinv*dot(dvdc[j],hourmod) ;
+  }
+  CalcElemFBHourglassForce(hgf,xd,hGAMMA,coef) ;
+}
+
+
+
+
+
+inline void CalcElemVelocityGradient(Real_t * restrict d,
+                                     const Array<vect3d,8> &vel,
+                                     const Array<vect3d,8> &b,
+                                     const Real_t detJ) {
+  const Real_t inv_detJ = Real_t(1.)/detJ ;
+
+  d[0] = inv_detJ * ( b[0].x * (vel[0].x-vel[6].x) +
+                      b[1].x * (vel[1].x-vel[7].x) +
+                      b[2].x * (vel[2].x-vel[4].x) +
+                      b[3].x * (vel[3].x-vel[5].x) );
+
+  d[1] = inv_detJ * ( b[0].y * (vel[0].y-vel[6].y) +
+                      b[1].y * (vel[1].y-vel[7].y) +
+                      b[2].y * (vel[2].y-vel[4].y) +
+                      b[3].y * (vel[3].y-vel[5].y) );
+
+  d[2] = inv_detJ * ( b[0].z * (vel[0].z-vel[6].z) +
+                      b[1].z * (vel[1].z-vel[7].z) +
+                      b[2].z * (vel[2].z-vel[4].z) +
+                      b[3].z * (vel[3].z-vel[5].z) );
+
+  Real_t dyddx  = inv_detJ * ( b[0].x * (vel[0].y-vel[6].y) +
+                               b[1].x * (vel[1].y-vel[7].y) +
+                               b[2].x * (vel[2].y-vel[4].y) +
+                               b[3].x * (vel[3].y-vel[5].y) ); 
+  
+  Real_t dxddy  = inv_detJ * ( b[0].y * (vel[0].x-vel[6].x) +
+                               b[1].y * (vel[1].x-vel[7].x) +
+                               b[2].y * (vel[2].x-vel[4].x) +
+                               b[3].y * (vel[3].x-vel[5].x) );
+
+  Real_t dzddx  = inv_detJ * ( b[0].x * (vel[0].z-vel[6].z) +
+                               b[1].x * (vel[1].z-vel[7].z) +
+                               b[2].x * (vel[2].z-vel[4].z) +
+                               b[3].x * (vel[3].z-vel[5].z) );
+
+  Real_t dxddz  = inv_detJ * ( b[0].z * (vel[0].x-vel[6].x) +
+                               b[1].z * (vel[1].x-vel[7].x) +
+                               b[2].z * (vel[2].x-vel[4].x) +
+                               b[3].z * (vel[3].x-vel[5].x) );
+
+  Real_t dzddy  = inv_detJ * ( b[0].y * (vel[0].z-vel[6].z) +
+                               b[1].y * (vel[1].z-vel[7].z) +
+                               b[2].y * (vel[2].z-vel[4].z) +
+                               b[3].y * (vel[3].z-vel[5].z) );
+
+  Real_t dyddz  = inv_detJ * ( b[0].z * (vel[0].y-vel[6].y) +
+                               b[1].z * (vel[1].y-vel[7].y) +
+                               b[2].z * (vel[2].y-vel[4].y) +
+                               b[3].z * (vel[3].y-vel[5].y) );
+  d[5]  = Real_t( .5) * ( dxddy + dyddx );
+  d[4]  = Real_t( .5) * ( dxddz + dzddx );
+  d[3]  = Real_t( .5) * ( dzddy + dyddz );
+}
+
+inline
+void CalcMonotonicQGradientsForElems(Real_t &delx_zeta, Real_t &delv_zeta,
+                                     Real_t &delx_xi, Real_t &delv_xi,
+                                     Real_t &delx_eta,Real_t &delv_eta,
+                                     const Array<vect3d,8> &x,
+                                     const Array<vect3d,8> &xd,
+                                     Real_t vol)
+{
+   const Real_t ptiny = Real_t(1.e-36) ;
+   const Real_t norm = Real_t(1.0)/(vol+ptiny) ;
+   
+   vect3d dj = (-0.25)*((x[0]+x[1]+x[5]+x[4])-(x[3]+x[2]+x[6]+x[7])) ;
+   vect3d di = ( 0.25)*((x[1]+x[2]+x[6]+x[5])-(x[0]+x[3]+x[7]+x[4])) ;
+   vect3d dk = ( 0.25)*((x[4]+x[5]+x[6]+x[7])-(x[0]+x[1]+x[2]+x[3])) ;
+   
+   vect3d a = cross(di,dj) ;
+
+   //--------------------
+   delx_zeta = vol/SQRT(dot(a,a)+ptiny) ;
+   
+   a *= norm ;
+   
+   vect3d dv = ( 0.25)*((xd[4]+xd[5]+xd[6]+xd[7])-(xd[0]+xd[1]+xd[2]+xd[3])) ;
+   
+   //--------------------
+   delv_zeta = dot(a,dv) ;
+   
+
+   /* find delxi and delvi ( j cross k ) */
+   
+   a = cross(dj,dk) ;
+   
+   //--------------------
+   delx_xi = vol/SQRT(dot(a,a)+ptiny) ;
+   
+   a*= norm ;
+   
+   dv = ( 0.25)*((xd[1]+xd[2]+xd[6]+xd[5])-(xd[0]+xd[3]+xd[7]+xd[4])) ;
+
+   //--------------------
+   delv_xi = dot(a,dv) ;
+   
+   a = cross(dk,di) ;
+   
+   //--------------------
+   delx_eta = vol/SQRT(dot(a,a)+ptiny) ;
+   
+   a *= norm ;
+   dv = (-0.25)*((xd[0]+xd[1]+xd[5]+xd[4])-(xd[3]+xd[2]+xd[6]+xd[7])) ;
+   
+   //--------------------
+   delv_eta = dot(a,dv) ;
+}
+
+//-----------------------------------------------------------------------------
+//--
+//-- Loci Definitions
+//--
+//-----------------------------------------------------------------------------
+
+
+// Compute the volume of the original non-deformed element
+// pos is defined by the grid reader and contains the original
+// mesh positions
+$rule pointwise(volo<-hexnodes->pos) {
+  Array<vect3d,8> locs ;
+  for(int i=0;i<8;++i)
+    locs[i] = $hexnodes[i]->$pos ;
+  $volo = HexVolume(locs) ;
+}
+
+// Compute element mass
+$rule pointwise(elemMass <-volo,refdens) {
+  $elemMass = $volo ;
+}
+
+// New volume for this timestep
+$rule pointwise(vnew<-volo,elemNodes) {
+  $vnew = HexVolume($elemNodes)/$volo ;
+  if($vnew < 0.0) {
+    cerr << "negative volume" << endl ;
+    Loci::Abort() ;
+  }
+}
+
+// Keep up with volume history
+$rule pointwise(vhist{n=0}),constraint(hexnodes) {
+  $vhist{n=0} = 1 ;
+}
+
+// this allows us to perform clipping on history volume, otherwise
+// we could access vnew{n-1} to get same effect
+$rule pointwise(vhist{n+1}<-vhist{n},vnew{n},v_cut),
+  inplace(vhist{n+1}|vhist{n}) {
+  // Clip Volume
+  Real_t tmpV = $vnew{n} ;
+  if(FABS(tmpV-Real_t(1.0)) < $v_cut)
+    tmpV = Real_t(1.0) ;
+  $vhist{n+1} = tmpV ;
+}
+
+// element characteristic length
+$rule pointwise(arealg<-vnew,volo,elemNodes) {
+  $arealg = ElemCharacteristicLength($elemNodes,$vnew*$volo) ;
+}
+
+// Gather element nodes into contiguous array
+$rule pointwise(elemNodes<-hexnodes->coord) {
+  for(size_t i=0;i<8;++i) 
+    $elemNodes[i] = $hexnodes[i]->$coord ;
+}
+
+// Gather nodal velocities into contiguous array
+$rule pointwise(elemVels<-hexnodes->vel) {
+  for(int i=0;i<8;++i)
+    $elemVels[i] = $hexnodes[i]->$vel ;
+}
+
+// Compute shape function derivatives
+$rule pointwise(vdov,D<-elemNodes,elemVels,dt) {
+  Array<vect3d,8> B ;
+  Real_t Dret[6] ;
+  Array<vect3d,8> xhalfstep ;
+  for(int i=0;i<8;++i)
+    xhalfstep[i] = $elemNodes[i] - 0.5*$dt*$elemVels[i] ;
+  
+  Real_t detJ = ShapeFunctionDerivatives(B,xhalfstep) ;
+  CalcElemVelocityGradient(Dret,$elemVels,B,detJ) ;
+  $vdov = (Dret[0]+Dret[1]+Dret[2]) ;
+  Real_t vdovthird = $vdov/Real_t(3.0) ;
+  $D.x = Dret[0]-vdovthird ;
+  $D.y = Dret[1]-vdovthird ;
+  $D.z = Dret[2]-vdovthird ;
+}
+
+// Compute initial conditions for energy, deposit energy into
+// element that contains node at origin.
+$rule pointwise(e_ic<-hexnodes->pos) {
+  double minnorm = 1 ;
+  for(int i=0;i<8;++i)
+    minnorm = min(minnorm,dot($hexnodes[i]->$pos,$hexnodes[i]->$pos)) ;
+  $e_ic = 0 ;
+  if(minnorm < 1e-16) { // This element is at origin, so deposit energy
+    $e_ic = Real_t(3.948746e+7) ;
+  }
+}
+
+// Define initial value for energy
+$rule pointwise(e{n=0}<-e_ic) { $e{n=0}=$e_ic ; }
+// Define energy advance (inplace notation and prelude saves us
+// from copying data
+$rule pointwise(e{n+1}<-e_next{n}),inplace(e{n+1}|e_next{n}),prelude {} ;
+
+
+// Setup pressure evolution in time
+$rule pointwise(p_ic<-e_ic) {$p_ic = 0 ; }
+$rule pointwise(p{n=0}<-p_ic) {$p{n=0}=$p_ic ;}
+$rule pointwise(p{n+1}<-p_next{n}),inplace(p{n+1}|p_next{n}),prelude {} ;
+
+
+// Setup artificial dissipation term temporal evolution
+$rule pointwise(q_ic<-e_ic) {$q_ic = 0 ;}
+$rule pointwise(q{n=0}<-q_ic) {$q{n=0}=$q_ic ;}
+$rule pointwise(q{n+1}<-q_next{n}),inplace(q{n+1}|q_next{n}),prelude {} ;
+  
+
+// Compute gradients for artificial dissipation
+$rule pointwise(delx,delv<-elemNodes,elemVels,volo,vnew) {
+  Real_t vol = $volo*$vnew ;
+  CalcMonotonicQGradientsForElems($delx[0],$delv[0],
+                                  $delx[1],$delv[1],
+                                  $delx[2],$delv[2],
+                                  $elemNodes,$elemVels,vol) ;
+}
+
+
+// compute dissipation linear and quadratic terms
+$rule pointwise(qq,ql<-qlc_monoq,qqc_monoq,monoq_limiter_mult,monoq_max_slope,
+                delx,delv,(zetap,zetam,etap,etam,xip,xim)->(delv),
+                zetap_map,zetam_map,etap_map,etam_map,xip_map,xim_map,
+                vdov,elemMass,vnew,volo) {
+  
+  Real_t qlin, qquad ;
+  Real_t phixi, phieta, phizeta ;
+
+  const Real_t ptiny = Real_t(1.e-36) ;
+  Real_t norm = Real_t(1.) / ( $delv[1] + ptiny ) ;
+  
+  Real_t delvm = $xim->$delv[$xim_map&0x3]*((($xim_map&0x4)==0x4)?-1.:1.) ;
+  Real_t delvp = $xip->$delv[$xip_map&0x3]*((($xip_map&0x4)==0x4)?-1.:1.) ;
+  
+  delvm = delvm * norm ;
+  delvp = delvp * norm ;
+
+  phixi = Real_t(.5) * ( delvm + delvp ) ;
+
+  delvm *= $monoq_limiter_mult ;
+  delvp *= $monoq_limiter_mult ;
+
+  if ( delvm < phixi ) phixi = delvm ;
+  if ( delvp < phixi ) phixi = delvp ;
+  if ( phixi < Real_t(0.)) phixi = Real_t(0.) ;
+  if ( phixi > $monoq_max_slope) phixi = $monoq_max_slope;
+  
+  /*  phieta     */
+  norm = Real_t(1.) / ( $delv[2] + ptiny ) ;
+
+  delvm = $etam->$delv[$etam_map&0x3]*((($etam_map&0x4)==0x4)?-1.:1.) ;
+  delvp = $etap->$delv[$etap_map&0x3]*((($etap_map&0x4)==0x4)?-1.:1.) ;
+ 
+  delvm = delvm * norm ;
+  delvp = delvp * norm ;
+
+  phieta = Real_t(.5) * ( delvm + delvp ) ;
+
+  delvm *= $monoq_limiter_mult ;
+  delvp *= $monoq_limiter_mult ;
+
+  if ( delvm  < phieta ) phieta = delvm ;
+  if ( delvp  < phieta ) phieta = delvp ;
+  if ( phieta < Real_t(0.)) phieta = Real_t(0.) ;
+  if ( phieta > $monoq_max_slope)  phieta = $monoq_max_slope;
+
+  /*  phizeta     */
+  norm = Real_t(1.) / ( $delv[0] + ptiny ) ;
+
+  delvm = $zetam->$delv[$zetam_map&0x3]*((($zetam_map&0x4)==0x4)?-1.:1.) ;
+  delvp = $zetap->$delv[$zetap_map&0x3]*((($zetap_map&0x4)==0x4)?-1.:1.) ;
+  
+  delvm = delvm * norm ;
+  delvp = delvp * norm ;
+
+  phizeta = Real_t(.5) * ( delvm + delvp ) ;
+
+  delvm *= $monoq_limiter_mult ;
+  delvp *= $monoq_limiter_mult ;
+
+  if ( delvm   < phizeta ) phizeta = delvm ;
+  if ( delvp   < phizeta ) phizeta = delvp ;
+  if ( phizeta < Real_t(0.)) phizeta = Real_t(0.);
+  if ( phizeta > $monoq_max_slope  ) phizeta = $monoq_max_slope;
+  
+  /* Remove length scale */
+
+  if ( $vdov > Real_t(0.) )  {
+    qlin  = Real_t(0.) ;
+    qquad = Real_t(0.) ;
+  } else {
+    Real_t delvxxi   = $delv[1]   * $delx[1]   ;
+    Real_t delvxeta  = $delv[2]   * $delx[2]   ;
+    Real_t delvxzeta = $delv[0]   * $delx[0]   ;
+
+    if ( delvxxi   > Real_t(0.) ) delvxxi   = Real_t(0.) ;
+    if ( delvxeta  > Real_t(0.) ) delvxeta  = Real_t(0.) ;
+    if ( delvxzeta > Real_t(0.) ) delvxzeta = Real_t(0.) ;
+
+    Real_t rho = $elemMass / ($volo * $vnew) ;
+
+    qlin = -$qlc_monoq * rho *
+            (  delvxxi   * (Real_t(1.) - phixi) +
+               delvxeta  * (Real_t(1.) - phieta) +
+               delvxzeta * (Real_t(1.) - phizeta)  ) ;
+
+    qquad = $qqc_monoq * rho *
+      (  delvxxi*delvxxi     * (Real_t(1.) - phixi*phixi) +
+         delvxeta*delvxeta   * (Real_t(1.) - phieta*phieta) +
+         delvxzeta*delvxzeta * (Real_t(1.) - phizeta*phizeta)  ) ;
+  }
+  
+  $qq = qquad ;
+  $ql = qlin  ;
+}
+
+inline void CalcPressure(Real_t &p_new, Real_t &bvc, Real_t & pbvc,
+                         Real_t e_old, Real_t compression, Real_t vnewc,
+                         Real_t pmin, Real_t pcut, Real_t eosvmax) {
+  Real_t c1s = Real_t(2.0)/Real_t(3.0) ;
+  bvc = c1s*(compression+Real_t(1.)) ;
+  pbvc = c1s ;
+
+  p_new = bvc*e_old ;
+  if(FABS(p_new) < pcut)
+    p_new = Real_t(0.0) ;
+  if(vnewc > eosvmax)
+    p_new = Real_t(0.0) ;
+  if(p_new < pmin)
+    p_new = pmin ;
+}
+
+// Compute next timestep energy, pressure and dissipation
+$rule pointwise(e_next,p_next,q_next,bvc,pbvc<-p,e,q,
+                vnew,vhist,pmin,p_cut,e_cut,q_cut,emin,qq,ql,refdens,eosvmax) {
+
+  Real_t compression = Real_t(1.)/$vnew - Real_t(1.) ;
+  Real_t delv = $vnew-$vhist ;
+  Real_t vchalf = $vnew - delv*Real_t(0.5) ;
+  Real_t compHalfStep = Real_t(1.)/vchalf - Real_t(1.) ;
+
+  Real_t e_new = max($e - Real_t(0.5)*delv*($p+$q),$emin) ;
+  
+  Real_t pHalfStep ;
+  CalcPressure(pHalfStep,$bvc,$pbvc,e_new,compHalfStep,$vnew,
+               $pmin,$p_cut,$eosvmax) ;
+  Real_t vhalf = 1./(1.+compHalfStep) ;
+  
+  Real_t q_new = 0.0 ;
+  if(delv <= 0.0) {
+    Real_t ssc = ($pbvc*e_new + vhalf*vhalf*$bvc*pHalfStep)/$refdens ;
+    if(ssc <= 0.0)
+      ssc = Real_t(0.333333e-36) ;
+    else
+      ssc = SQRT(ssc) ;
+    q_new = (ssc*$ql + $qq) ;
+  }
+  e_new = e_new + 0.5*delv*(3.*($p+$q) - 4.*(pHalfStep + q_new)) ;
+  if(FABS(e_new)< $e_cut)
+    e_new = 0.0 ;
+  if(e_new < $emin)
+    e_new = $emin ;
+
+  Real_t p_new ;
+  CalcPressure(p_new,$bvc,$pbvc,e_new,compression,$vnew,
+               $pmin,$p_cut,$eosvmax) ;
+
+  Real_t q_tilde = 0.0 ;
+  if(delv <= 0.0) {
+    Real_t ssc = ($pbvc*e_new + $vnew*$vnew*$bvc*p_new)/$refdens ;
+    if(ssc <= 0.0)
+      ssc = Real_t(0.333333e-36) ;
+    else
+      ssc = SQRT(ssc) ;
+    q_tilde = (ssc*$ql+$qq) ;
+  }
+  
+  const Real_t sixth = Real_t(1.0) / Real_t(6.0) ;
+  e_new = e_new - (Real_t(7.0)*($p + $q) - Real_t(8.0)*(pHalfStep + q_new)
+                   + (p_new + q_tilde)) * delv*sixth ;
+
+  if (FABS(e_new) < $e_cut) {
+    e_new = Real_t(0.)  ;
+  }
+  if ( e_new  < $emin ) {
+    e_new = $emin ;
+  }
+  CalcPressure(p_new,$bvc,$pbvc,e_new,compression,$vnew,
+               $pmin,$p_cut,$eosvmax) ;
+  if ( delv <= Real_t(0.) ) {
+    Real_t ssc = ( $pbvc * e_new + $vnew* $vnew* $bvc* p_new) / $refdens ;
+    
+    if ( ssc <= Real_t(0.) ) {
+      ssc = Real_t(.333333e-36) ;
+    } else {
+      ssc = SQRT(ssc) ;
+    }
+    
+    q_new = (ssc*$ql + $qq) ;
+    
+    if (FABS(q_new) < $q_cut) q_new = Real_t(0.) ;
+  }
+  
+  $e_next = e_new ;
+  $p_next = p_new ;
+  $q_next = q_new ;
+}
+
+// compute sound speed in element
+$rule pointwise(ss<-vnew,refdens,e_next,p_next,pbvc,bvc,ss4o3) {
+  Real_t ss2 = ($pbvc*$e_next + $vnew*$vnew*$bvc*$p_next)/$refdens;
+  ss2 = max(ss2,Real_t(1.111111e-36)) ;
+  $ss = sqrt(ss2) ;
+}
+
+// Compute Nodal Forces
+
+// Stress
+$type elemStress store<vect3d> ;
+
+$rule pointwise(elemStress<-p_next,q_next) {
+  $elemStress.x = -$p_next - $q_next ;
+  $elemStress.y = $elemStress.x ;
+  $elemStress.z = $elemStress.x ;
+}
+
+// Unit rule for nodal forces, (apply rules will be applied from elements)
+// We initialized force to the identity of summation.
+$rule unit(force),constraint(nodes) {
+  $force = vect3d(0,0,0) ;
+}
+
+// Sum Stress forces to nodes
+$rule apply(hexnodes->force<-elemNodes,elemStress)[Loci::Summation] {
+  Array<vect3d,8> B ;
+  ElemNodeNormals(B,$elemNodes) ;
+  
+  Array<vect3d,8> nforce ;
+  ElemStressToNodeForces(nforce,B,$elemStress) ;
+  // Here we join (using the summation operator) the
+  // hourglass forces to the node
+  for(int i=0;i<8;++i)
+    join($hexnodes[i]->$force,nforce[i]) ;
+}
+
+// Hourglass force to nodes
+$rule apply(hexnodes->force<-vnew,volo,ss,elemNodes,elemVels,elemMass,hgcoef)[Loci::Summation] {
+  Array<vect3d,8> dvdc ;
+  CalcElemVolumeDerivative(dvdc,$elemNodes) ;
+  Array<vect3d,8> hgf ;
+  Real_t determ = $volo*$vnew ;
+  Real_t coef = -$hgcoef*0.01*$ss*$elemMass/CBRT(determ) ;
+  HourglassForce(hgf,$elemNodes,$elemVels,dvdc,determ,coef) ;
+  // Here we join (using the summation operator) the
+  // element forces to the node
+  for(int i=0;i<8;++i)
+    join($hexnodes[i]->$force,hgf[i]) ;
+}
+

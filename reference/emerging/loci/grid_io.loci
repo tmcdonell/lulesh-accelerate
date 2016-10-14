@@ -1,0 +1,190 @@
+$include "hydro.lh"
+
+#include <sstream>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+using namespace std ;
+
+void dump_pos(const sequence &seq,const_store<vector3d<double> > &pos,
+	      string plot_postfix, string modelName) {
+  if(Loci::MPI_rank == 0) {
+    // if output directory doesn't exist, create one
+    struct stat statbuf ;
+    if(stat("output",&statbuf))
+      mkdir("output",0755) ;
+    else
+      if(!S_ISDIR(statbuf.st_mode)) {
+        cerr << "file 'output' should be a directory!, rename 'output' and start again."
+             << endl ;
+        Loci::Abort() ;
+      }
+  }
+
+  ostringstream oss ;
+
+  if(plot_postfix != "") 
+    oss << "output/grid_pos." << plot_postfix << "_" << modelName ;
+  else
+    oss << "output/grid_pos." << modelName ;
+						        
+  string filename = oss.str() ;
+
+#ifdef VERBOSE
+  if(Loci::MPI_rank == 0)
+    cout << "writing file " << filename << endl ;
+#endif
+
+
+  hid_t file_id = Loci::hdf5CreateFile(filename.c_str(),H5F_ACC_TRUNC,
+				       H5P_DEFAULT, H5P_DEFAULT) ;
+
+  Loci::writeContainer(file_id,"pos",pos.Rep()) ;
+
+  Loci::hdf5CloseFile(file_id) ;
+}
+
+class do_topo_output : public singleton_rule {
+  const_param<int> niter ;
+  param<bool> output_topo ;
+public:
+  do_topo_output() {
+    name_store("$n{n}",niter) ;
+    name_store("output_topo{n}",output_topo) ;
+    input("$n{n}") ;
+    output("output_topo{n}") ;
+  }
+  void compute(const sequence &seq) {
+    *output_topo = (*niter == 0) ;
+  }
+} ;
+register_rule<do_topo_output> register_do_topo_output ;
+																								   
+class output_grid_topology : public pointwise_rule {
+  param<bool> OUTPUT ;
+  const_multiMap upper,lower,boundary_map,face2node ;
+  const_store<vect3d> pos ;
+  const_Map ref ;
+  const_store<string> boundary_names ;
+  const_param<string> modelName ;
+public:
+  output_grid_topology() {
+    name_store("OUTPUT{n}",OUTPUT) ;
+    name_store("upper",upper) ;
+    name_store("lower",lower) ;
+    name_store("boundary_map",boundary_map) ;
+    name_store("face2node",face2node) ;
+    name_store("ref",ref) ;
+    name_store("boundary_names{n}",boundary_names) ;
+    name_store("modelName",modelName) ;
+    name_store("coord{n}",pos) ;
+    input("modelName") ;
+    input("(upper,lower,boundary_map)->face2node->coord{n}") ;
+    input("boundary_map->ref->boundary_names{n}") ;
+    conditional("output_topo{n}") ;
+    output("OUTPUT{n}") ;
+    disable_threading() ;
+  }
+										  void compute(const sequence &seq) ;
+} ;
+
+
+
+void output_grid_topology::compute(const sequence &seq) {
+  if(Loci::MPI_rank == 0) {
+    cout << "calling write grid topology" << endl ;
+    // if output directory doesn't exist, create one
+    struct stat statbuf ;
+    if(stat("output",&statbuf))
+      mkdir("output",0755) ;
+    else
+      if(!S_ISDIR(statbuf.st_mode)) {
+        cerr << "file 'output' should be a directory!, rename 'output' and start again."
+             << endl ;
+        Loci::Abort() ;
+      }
+  }
+  string filename = "output/"+*modelName+".topo" ;
+  Loci::parallelWriteGridTopology(filename.c_str(),
+				  upper.Rep(),lower.Rep(),boundary_map.Rep(),
+				  face2node.Rep(),
+				  ref.Rep(),
+				  boundary_names.Rep(),
+				  pos.Rep(),
+				  entitySet(seq)) ;
+}
+
+
+register_rule<output_grid_topology> register_output_grid_topology ;
+
+class output_grid_positions_topo: public pointwise_rule {
+  const_store<vector3d<double> > pos ;
+  const_param<string> plot_postfix ;
+  const_param<string> modelName ;
+  param<bool> OUTPUT ;
+public:
+  output_grid_positions_topo() {
+    name_store("pos",pos) ;
+    name_store("modelName",modelName) ;
+    name_store("OUTPUT",OUTPUT) ;
+    conditional("output_topo") ;
+    constraint("coord") ;
+    input("coord") ;
+    input("modelName") ;
+    output("OUTPUT") ;
+  }
+  void compute(const sequence &seq) {
+    dump_pos(seq,pos,string(""),*modelName) ;
+  }
+} ;
+//register_rule<output_grid_positions_topo> register_output_grid_positions_topo ;
+
+$type plot_postfix param<string> ;
+$type do_plot param<bool> ;
+$type plot_freq param<int> ;
+$rule default(plot_freq) {
+  $plot_freq = 100000 ;
+}
+
+$rule singleton(plot_postfix{n}<-$n{n}) {
+  $plot_postfix{n} = "" ;
+  int cycle = $$n{n} ;
+  ostringstream oss ;
+  oss << cycle ;
+  $plot_postfix{n} = oss.str() ;
+}
+
+$rule singleton(do_plot{n}<-$n{n},plot_freq{n},sim_time{n},stop_time{n}) {
+// Add boundary conditions to vars 
+  $do_plot{n} = (($$n{n}%$plot_freq{n}) == 0 ||
+                 $stop_time{n}-$sim_time{n} < 1e-15) ;
+}
+
+class output_grid_positions: public pointwise_rule {
+  const_store<vector3d<double> > pos ;
+  const_param<string> plot_postfix ;
+  const_param<string> modelName ;
+  param<bool> OUTPUT ;
+public:
+  output_grid_positions() {
+    name_store("coord",pos) ;
+    name_store("plot_postfix",plot_postfix) ;
+    name_store("modelName",modelName) ;
+    name_store("OUTPUT",OUTPUT) ;
+    conditional("do_plot") ;
+    constraint("coord") ;
+    input("coord") ;
+    input("plot_postfix") ;
+    input("modelName") ;
+    output("OUTPUT") ;
+  }
+  void compute(const sequence &seq) {
+    dump_pos(seq,pos,*plot_postfix,*modelName) ;
+  }
+} ;
+register_rule<output_grid_positions> register_output_grid_positions ;
+
+
+

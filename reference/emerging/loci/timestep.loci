@@ -1,0 +1,90 @@
+$include "hydro.lh"
+using namespace std ;
+#define SHOW_PROGRESS
+
+// Describe the evolution of the timestep with iterations of the algorithm
+$rule singleton(dt{n=0}<-dtstart) {$dt{n=0} = $dtstart ;}
+$rule singleton(dt{n+1}<-dt_next{n}) {$dt{n+1} = $dt_next{n} ;}
+
+// Accumulate the simulation time
+$rule singleton(sim_time{n=0}),constraint(UNIVERSE) { $sim_time{n=0} = 0.0 ; }
+$rule singleton(sim_time{n+1}<-sim_time{n},dt{n}) {
+  $sim_time{n+1} = $sim_time{n} + $dt{n} ;
+}
+
+
+// Compute the stable timestep constraint
+$rule unit(dt_stable),constraint(UNIVERSE) {
+  $dt_stable =  1e20 ;
+}
+
+// Apply CFL constraint
+$rule apply(dt_stable<-qqc,arealg,ss,vdov)[Loci::Minimum] {
+  Real_t dtf = $ss*$ss ;
+  Real_t qqc2 = 64.*$qqc*$qqc ;
+  if($vdov < 0.0) {
+    dtf = dtf + qqc2*$arealg*$arealg*$vdov*$vdov ;
+  }
+  dtf = SQRT(dtf) ;
+  dtf = 0.5*$arealg/dtf ;
+  if($vdov != 0.0) {
+    join($dt_stable,dtf) ;
+  }
+}
+
+// Apply Hydro Constraint
+$rule apply(dt_stable<-vdov,dvovmax)[Loci::Minimum] {
+  if($vdov != 0.0) {
+    Real_t dtdvov = $dvovmax/(FABS($vdov)+1e-20) ;
+    dtdvov *= 2./3. ;
+    join($dt_stable,dtdvov) ;
+  }
+}
+
+// Compute dt for next iteration
+$rule singleton(dt_next<-dt,dt_stable,stop_time,sim_time,dtfixed,dtmax,
+                deltatimemultlb,deltatimemultub) {
+  Real_t newdt = $dtfixed;
+  if($dtfixed < 0.0) {
+    newdt = $dt_stable ;
+    Real_t ratio = 0 ;
+    if($dt > 0.0) {
+      ratio = newdt/$dt ;
+    }
+    if(ratio >= 1.0) {
+      if(ratio < $deltatimemultlb)
+        newdt = $dt ;
+      else if( ratio > $deltatimemultub) {
+        newdt = $dt*$deltatimemultub ;
+      }
+    }
+    if(newdt > $dtmax)
+      newdt = $dtmax ;
+  }
+  if($sim_time == 0.0)
+    newdt = $dt ;
+  Real_t targetdt = $stop_time-$sim_time ;
+  if(targetdt > newdt &&
+     targetdt < (4.0*newdt/3.0))
+    targetdt = 2.0*newdt/3.0 ;
+
+  if(targetdt < newdt)
+    newdt = max(targetdt,0.0) ;
+
+  $dt_next = newdt ;
+#ifdef SHOW_PROGRESS
+  if(Loci::MPI_rank == 0)
+    cout << "time=" << $sim_time << ", dt=" << $dt_next << endl ;
+#endif
+}
+
+// Compute termination condition
+$rule singleton(endSimulation{n}<-$n{n},dt{n},maxsteps) {
+  $endSimulation{n} = false ;
+  if($$n{n} > $maxsteps)
+    $endSimulation{n} = true ;
+  if($dt{n} < 1e-16)
+    $endSimulation{n} = true ;
+}
+
+

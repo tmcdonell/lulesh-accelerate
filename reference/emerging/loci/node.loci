@@ -1,0 +1,108 @@
+$include "hydro.lh"
+using namespace std ;
+using Loci::Array ;
+
+$type nodes store<bool> ;
+$rule pointwise(nodes<-pos) {
+  $nodes = true ;
+}
+
+
+
+// Define node positions
+
+// Initial coordinates defined by grid positions
+$rule pointwise(coord_ic<-pos) {
+  $coord_ic = $pos ;
+}
+
+// First iteration coordinate set by initial conditions
+$rule pointwise(coord{n=0}<-coord_ic) {
+  $coord{n=0} = $coord_ic ;
+}
+
+// Advance position using velocity at next timestep
+// inplace means that coord{n+1} and coord{n} use the same memory
+$rule pointwise(coord{n+1}<-coord{n},vel{n+1},dt{n}),
+  inplace(coord{n+1}|coord{n}) {
+  $coord{n+1} = $coord{n} + $vel{n+1}*$dt{n} ;
+}
+
+// Set up the velocity initial conditions to be zero
+$rule pointwise(vel_ic),constraint(nodes) {
+  $vel_ic = vect3d(0.,0.,0.) ;
+}
+
+$rule pointwise(vel{n=0}<-vel_ic) {
+  $vel{n=0} = $vel_ic ;
+}
+
+
+// Collect nodal boundary condition information
+$type nodeConstraint store<char> ;
+
+$rule unit(nodeConstraint),constraint(nodes) {
+  $nodeConstraint = 0 ;
+}
+
+// Define logical OR operator for reduction
+template <class T> struct LogicalOr {
+  void operator()(T &r, const T &s) {
+    r |= s ;
+  }
+} ;
+
+$rule apply(face2node->nodeConstraint)[LogicalOr],constraint(Xsymmetry_BC) {
+  char symtype = 0x1 ;
+  const int fsz = $face2node.size() ;
+  for(int i=0;i<fsz;++i)
+    join($face2node[i]->$nodeConstraint,symtype) ;
+}
+$rule apply(face2node->nodeConstraint)[LogicalOr],constraint(Ysymmetry_BC) {
+  char symtype = 0x2 ;
+  const int fsz = $face2node.size() ;
+  for(int i=0;i<fsz;++i)
+    join($face2node[i]->$nodeConstraint,symtype) ;
+}
+$rule apply(face2node->nodeConstraint)[LogicalOr],constraint(Zsymmetry_BC) {
+  char symtype = 0x4 ;
+  const int fsz = $face2node.size() ;
+  for(int i=0;i<fsz;++i)
+    join($face2node[i]->$nodeConstraint,symtype) ;
+}
+
+
+// Advance velocities in time using newtons laws
+// Apply velocity clipping and symmetry BC's
+$rule pointwise(vel{n+1}<-vel{n},force{n},nodalMass{n},dt{n},u_cut,
+                nodeConstraint),
+  inplace(vel{n+1}|vel{n}) {
+  $vel{n+1} = $vel{n} + $dt{n}*$force{n}/$nodalMass{n} ;
+  if(($nodeConstraint &0x1)!=0 || FABS($vel{n+1}.x) < $u_cut)
+    $vel{n+1}.x = 0. ;
+  if(($nodeConstraint &0x2)!=0 || FABS($vel{n+1}.y) < $u_cut)
+    $vel{n+1}.y = 0. ;
+  if(($nodeConstraint &0x4)!=0 || FABS($vel{n+1}.z) < $u_cut)
+    $vel{n+1}.z = 0. ;
+}
+
+// Compute nodal mass
+$rule unit(nodalMass),constraint(nodes) {
+  $nodalMass = 0. ;
+}
+
+// divide element mass equally among 8 nodes, sum all elements to get
+// nodal mass
+$rule apply(hexnodes->nodalMass<-elemMass)[Loci::Summation] {
+  Real_t nmass = 0.125*$elemMass ;
+  for(int i=0;i<8;++i)
+    join($hexnodes[i]->$nodalMass,nmass) ;
+}
+
+// To end simulation, collapse coordinate to "solution" which plays a role
+// similar to main in a C program (It is the default query.)
+$type solution store<vect3d> ;
+$rule pointwise(solution<-coord{n}),conditional(endSimulation{n}) {
+  $solution = $coord{n} ;
+}
+

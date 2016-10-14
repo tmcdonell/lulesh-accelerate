@@ -1,0 +1,66 @@
+
+This is the Loci version of LULESH.  Loci assembles a parallel code
+from a set of rules that are attached to serial code sections.  Since
+Loci provides a rule-based matching of algorithm to computing resources,
+it can expose parallelism more easily than many other programming models.
+
+For more information, contact Ed Luke ( luke@cse.msstate.edu )
+
+#######################################################################
+
+To setup the grid for this case:
+
+make grid_setup
+./grid_setup > test.grd
+plot3d2vog -o -m test
+
+
+The above program sets up the grid in file test.vog, while the provided
+test.vars file specifies the boundary conditions.
+
+The files are divided out as follows:
+
+main.loci  // main driver
+elem.loci  // element computations
+node.loci  // node computations
+timestep.loci // timestep computations
+hydro.lh   // include file that defines loci types
+varsFileInputs.loci // Defines default parameters that can be changed via .vars
+grid_io.loci // defines output routines to save the grid in a form that 
+             // can be extracted and visualized
+utils.loci   // utility routines to convert finite volume data structures to
+             // element based one.
+
+
+lulesh is basically the first 6 files of above.  gridio can be
+eliminated for performance tests, this will remove the gridfile output
+
+to see the solution enter
+
+extract -en test 1499 x
+
+This will extract ensight files in the directory test_ensight.1499, you can visualize these files using paraview.
+
+
+Some notes on methods for running the code:
+
+Basic running in serial
+
+./hydro test
+
+
+Some optimization options to try out:
+
+--memrandomized   This enables an experimental randomized greedy algorithm that
+                  minimizies the memory footprint by optimizing intermediate
+                  variable lifetimes.
+
+--nochomp         This disables the chomping optimization
+
+--scheduleoutput  Output generated schedule files in .schedule-<pnum>
+
+--duplicate_work  Try to reduce number of synchronization points by replicating
+                  work 
+
+--verbose         Make the code output more information in .debug files.
+

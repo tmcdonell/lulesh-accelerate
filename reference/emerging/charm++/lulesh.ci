@@ -1,0 +1,131 @@
+mainmodule lulesh {
+
+  readonly CProxy_Main mainProxy;
+  readonly int elemDimX;
+  readonly int elemDimY;
+  readonly int elemDimZ;
+  readonly int blockDimX;
+  readonly int blockDimY;
+  readonly int blockDimZ;
+  readonly int ghostDimX;
+  readonly int ghostDimY;
+  readonly int ghostDimZ;
+  readonly int chareDimX;
+  readonly int chareDimY;
+  readonly int chareDimZ;
+  readonly double charesPerPE;
+  readonly int numElems;
+  readonly int numNodes;
+  readonly int ghostElems;
+  readonly int frontOffset;
+  readonly int backOffset;
+  readonly int rightOffset;
+  readonly int leftOffset;
+  readonly int upOffset;
+  readonly int downOffset;
+  readonly Real_t stopTime;
+  readonly int lbFrequency;
+  readonly int cpFrequency;
+
+  // Register Reductions initnodes
+  initnode void registerMinReal(void);
+  initnode void registerAveTime(void);
+
+  mainchare [migratable] Main {
+    entry Main(CkArgMsg *msg);
+
+    // Checkin for taking average timing
+    entry void averageTimeCheckin(CkReductionMsg *msg);
+
+    // Checkin for initialization
+    entry void initCheckin(CkReductionMsg *msg);
+  };
+
+  array [3D] Domain {
+    entry Domain();
+    // Load balancing routine
+    entry void startLB();
+
+    // Start Lagrange Leap-Frog
+    entry void beginIteration();
+    // Finish Lagrange Leap-Frog and
+    // calculate Time Constraints
+    entry void resumeNodeIteration();
+    entry void resumeElemIteration();
+
+    // Clocking mechanism for timesteps
+    entry [reductiontarget] void updateTimeIncrement(Real_t dt);
+
+    // Receives nodal forces from neighboring domains
+    entry void receiveNodeGhosts(int dir, int width, int height,
+                                 Real_t ghostData[width*height*3]);
+    // Receives element viscocities from neighboring domains
+    entry void receiveElemGhosts(int dir, int width, int height,
+                                 Real_t ghostData[width*height*3]);
+    // Receives nodal mass from neighboring domains (initialization only)
+    entry void receiveNodalMass(int dir, int width, int height,
+                                 Real_t ghostData[width*height]);
+
+    // Print energy for correctness testing
+    entry void printEnergy();
+
+    //
+    // SDAG
+    //
+
+    entry void run() {
+      atomic {
+        startIterTime = CmiWallTimer();
+      }
+      for (iterations = 0; iterations < MAX_ITERATIONS; iterations++) {
+        atomic {
+          beginIteration();
+          sendNodeGhosts();
+        }
+        // Sent forces
+        for (ghostNodeCount = 0; ghostNodeCount < numNodeGhosts; ghostNodeCount++) {
+          when receiveNodeGhosts (int dir, int width, int height,
+                                 Real_t ghostData[width*height*3]) atomic {
+            processNodeGhosts(dir, width, height, ghostData);
+          }
+        }
+        atomic {
+          updateForceGhosts();
+          resumeNodeIteration();
+          sendElemGhosts();
+        }
+        // Sent viscocities
+        for (ghostElemCount = 0; ghostElemCount < numElemGhosts; ghostElemCount++) {
+          when receiveElemGhosts (int dir, int width, int height,
+                                 Real_t ghostData[width*height*3]) atomic {
+            processElemGhosts(dir, width, height, ghostData);
+          }
+        }
+        atomic {
+          resumeElemIteration();
+        }
+        when updateTimeIncrement(Real_t dt) atomic {
+#if USE_FIXED_DT
+          domain->deltaTime = DT_FIXED;
+#else
+          domain->deltaTime = dt;
+#endif
+          domain->totalTime += domain->deltaTime;
+          if (dt == Real_t(0.0)) {
+            endIterTime = CmiWallTimer();
+            iterTime = endIterTime - startIterTime;
+            averageTime();
+          }
+        }
+      }
+      // Iterations Completed
+      atomic {
+        endIterTime = CmiWallTimer();
+        iterTime = endIterTime - startIterTime;
+        averageTime();
+      }
+    };
+
+  };
+
+};

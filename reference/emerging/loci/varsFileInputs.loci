@@ -1,0 +1,36 @@
+$include "hydro.lh"
+
+// Define cutoffs
+$rule default(e_cut) { $e_cut = 1e-7 ; }
+$rule default(p_cut) { $p_cut = 1e-7 ; }
+$rule default(q_cut) { $q_cut = 1e-7 ; }
+$rule default(u_cut) { $u_cut = 1e-7 ; }
+$rule default(v_cut) { $v_cut = 1e-10; }
+
+$rule default(hgcoef) { $hgcoef = 3.0 ; }
+$rule default(ss4o3) { $ss4o3 = 4.0/3.0 ; }
+
+$rule default(qstop) { $qstop = 1e12; }
+$rule default(monoq_max_slope) { $monoq_max_slope = 1.0 ; }
+$rule default(monoq_limiter_mult) { $monoq_limiter_mult = 2.0 ; }
+$rule default(qlc_monoq) { $qlc_monoq = 0.5; }
+$rule default(qqc_monoq) { $qqc_monoq = 2.0/3.0 ; }
+$rule default(qqc) { $qqc = 2.0; }
+$rule default(pmin) { $pmin = 0.0; }
+$rule default(emin) { $emin = -1e15 ; }
+$rule default(dvovmax) { $dvovmax = 0.1; }
+$rule default(eosvmax) { $eosvmax = 1e9; }
+$rule default(eosvmin) { $eosvmin = 1e-9;}
+$rule default(refdens) { $refdens = 1.0; }
+
+$rule default(stop_time) { $stop_time = 1e-2; }
+$rule default(dtmax) {$dtmax = 1e-2 ;}
+$rule default(dtfixed) { $dtfixed = -1 ; }
+$rule default(deltatimemultlb) { $deltatimemultlb = 1.1 ; }
+$rule default(deltatimemultub) { $deltatimemultub = 1.2 ; }
+$rule default(dtstart) {$dtstart = 1e-7; }
+$rule default(maxsteps) {$maxsteps = 10000000;}
+
+// Add boundary conditions input to vars 
+$type boundary_conditions param<Loci::options_list> ;
+$rule optional(boundary_conditions) {}

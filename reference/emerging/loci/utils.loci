@@ -1,0 +1,391 @@
+#include <Loci.h>
+#include <iostream>
+$include "hydro.lh"
+
+// Utility routines to setup element mapping based on existing face based
+// data structure
+using namespace std ;
+
+inline bool cellcmp(const pair<int,Loci::Array<int,9> > &p1,
+		      const pair<int,Loci::Array<int,9> > &p2) {
+  return p1.first< p2.first ;
+}
+  
+
+void setup_hexahedra_map(fact_db &facts) {
+  using Loci::MapRepP ;
+  using Loci::MPI_rank ;
+  // Get face based data structures
+  // cl: cell on left side of face
+  // cr: cell on right side of face
+  // ci: cell on inside of domain next to boundary face
+  // face2node:  nodes that form face
+  // geom_cells: set that describes the geometric cells
+  Map cl,cr,ci ;
+  multiMap face2node ;
+  cl = facts.get_variable("cl") ;
+  cr = facts.get_variable("cr") ;
+  ci = facts.get_variable("ci") ;
+
+  face2node = facts.get_variable("face2node") ;
+  constraint geom_cells_c ;
+  geom_cells_c = facts.get_variable("geom_cells") ;
+  entitySet geom_cells = *geom_cells_c ;
+  entitySet faces = face2node.domain() ;
+  entitySet boundary_faces = ci.domain() ;
+  entitySet interior_faces = faces-boundary_faces ;
+
+  // In the parallel case we need to find the file numbering of the
+  // nodes so that we can generate the same orientation of the
+  // hex element when running in parallel as we use in serial
+  fact_db::distribute_infoP df = facts.get_distribute_info() ;
+  dMap g2f ;
+  std::vector<entitySet> ptn = facts.get_init_ptn() ;
+  if(df != 0) {
+    // Gather the global2file numbering map, Fill this map with information
+    // for all nodes that face2node accesses on this processor
+    g2f = df->g2f.Rep() ;
+    MapRepP fmap = MapRepP(face2node.Rep()) ;
+    entitySet fnodes = fmap->image(face2node.domain()) ;
+    fnodes -= ptn[MPI_rank] ;
+    g2f.setRep(MapRepP(g2f.Rep())->expand(fnodes,ptn)) ;
+  } else {
+    // serial case, jsut setup the global2file numbering to be the identity
+    // map
+    MapRepP fmap = MapRepP(face2node.Rep()) ;
+    entitySet fnodes = fmap->image(face2node.domain()) ;
+    FORALL(fnodes,nd) {
+      g2f[nd] = nd ;
+    } ENDFORALL ;
+  }
+  
+
+  // To create the elements gather face information to their cells
+  // The information we collect is the global and file numberings of the
+  // hex faces.  The global numbering is used for Loci access, the file
+  // numbering is used to order the search over faces so that we always
+  // obtain the same element orientation when running in parallel
+  vector<pair<int, Loci::Array<int,9> > > flist ;
+  // Gather interior face information (two sides)
+  FORALL(interior_faces,fc) {
+    Loci::Array<int,9> fcnds ;
+    if(face2node[fc].size() == 4) {
+      fcnds[0] = face2node[fc][0] ;
+      fcnds[1] = face2node[fc][1] ;
+      fcnds[2] = face2node[fc][2] ;
+      fcnds[3] = face2node[fc][3] ;
+      fcnds[4] = cl[fc] ;
+      fcnds[5] = g2f[face2node[fc][0]] ;
+      fcnds[6] = g2f[face2node[fc][1]] ;
+      fcnds[7] = g2f[face2node[fc][2]] ;
+      fcnds[8] = g2f[face2node[fc][3]] ;
+      flist.push_back(pair<int,Loci::Array<int,9> >(cr[fc],fcnds)) ;
+      std::swap(fcnds[0],fcnds[3]) ;
+      std::swap(fcnds[1],fcnds[2]) ;
+      std::swap(fcnds[5],fcnds[8]) ;
+      std::swap(fcnds[6],fcnds[7]) ;
+      fcnds[4] = cr[fc] ;
+      flist.push_back(pair<int,Loci::Array<int,9> >(cl[fc],fcnds)) ;
+    }
+  } ENDFORALL ;
+  // Gather boundary face information
+  FORALL(boundary_faces,fc) {
+    Loci::Array<int,9> fcnds ;
+    if(face2node[fc].size() == 4) {
+      fcnds[0] = face2node[fc][3] ;
+      fcnds[1] = face2node[fc][2] ;
+      fcnds[2] = face2node[fc][1] ;
+      fcnds[3] = face2node[fc][0] ;
+      fcnds[4] = cl[fc] ;
+      fcnds[5] = g2f[face2node[fc][3]] ;
+      fcnds[6] = g2f[face2node[fc][2]] ;
+      fcnds[7] = g2f[face2node[fc][1]] ;
+      fcnds[8] = g2f[face2node[fc][0]] ;
+      flist.push_back(pair<int,Loci::Array<int,9> >(cl[fc],fcnds)) ;
+      
+    }
+  } ENDFORALL ;
+  // Use parallel sort to move face information to processor that owns cell
+  std::sort(flist.begin(),flist.end(),cellcmp) ;
+  // In parallel, move cells to owning processor
+  if(Loci::MPI_processes > 1) {
+    geom_cells &= ptn[Loci::MPI_rank] ;
+    int end = geom_cells.Max()+1 ;
+    vector<int> splits(Loci::MPI_processes) ;
+    MPI_Allgather(&end,1,MPI_INT,&splits[0],1,MPI_INT,MPI_COMM_WORLD) ;
+    vector<pair<int, Loci::Array<int,9> > > splitT(Loci::MPI_processes-1) ;
+    Loci::Array<int,9> tmp ;
+    for(int i=0;i<9;++i)
+      tmp[i] = -1 ;
+    for(int p=0;p<Loci::MPI_processes-1;++p) {
+      splitT[p].first = splits[p] ;
+      splitT[p].second = tmp ;
+    }
+    Loci::parSplitSort(flist,splitT,cellcmp,MPI_COMM_WORLD) ;
+  }
+
+  // Search to find the 8 nodes of the hexahedra
+  MapVec<8> hexnodes ;
+  hexnodes.allocate(geom_cells) ;
+  // Also create maps to neighboring cells.
+  Map zetap,zetam,xip,xim,etap,etam ;
+  zetap.allocate(geom_cells) ;
+  zetam.allocate(geom_cells) ;
+  xip.allocate(geom_cells) ;
+  xim.allocate(geom_cells) ;
+  etap.allocate(geom_cells) ;
+  etam.allocate(geom_cells) ;
+  
+  int flsz = flist.size() ;
+  for(int i=0;i<flsz;) {
+    int cell = flist[i].first ;
+    int j=i+1 ;
+    while(j<flsz && flist[j].first == cell)
+      ++j ;
+    // Every hexahedra should have 6 quad faces
+    if(j-i != 6) { 
+      cerr << "non hexahedral cell detected" << endl ;
+      cerr << "j-i= " << j-i << endl ;  
+    } else {
+      // The face with the lowest file numbering sum will form the
+      // bottom of the hex
+      // first find face with lowest node number sum
+      int low = 0 ;
+      int sumlow =(flist[i].second[5]+flist[i].second[6]+
+                   flist[i].second[7]+flist[i].second[8]) ;
+      for(int k=1;k<6;++k) {
+        int locsum =(flist[i+k].second[5]+flist[i+k].second[6]+
+                     flist[i+k].second[7]+flist[i+k].second[8]) ;
+        if(locsum < sumlow) {
+          low = k ;
+          sumlow = locsum ;
+        }
+      }
+      if(low != 0)
+        std::swap(flist[i],flist[i+low]) ;
+      bool list[6] = {false,false,false,false,false,false} ;
+      // Order the bottom face so that the lowest file number comes first
+      // this will fix the orientation of the element's parametric space
+      // to the file numbering of the nodes
+      int lownd = flist[i].second[5] ;
+      low = 0 ;
+      for(int k=1;k<4;++k)
+        if(flist[i].second[5+k] < lownd) {
+          lownd = flist[i].second[5+k] ;
+          low = k ;
+        }
+      // copy first face to hexnodes with rotation
+      for(int k=0;k<4;++k)
+        hexnodes[cell][k] = flist[i].second[(low+k)&0x3] ;
+      zetam[cell] = flist[i].second[4] ;
+      
+      // search for face that shares edge with edge 0 1 of hex
+      int e1 = hexnodes[cell][1] ;
+      int e2 = hexnodes[cell][0] ;
+      int cnt = 0 ;
+      for(int k=i+1;k<j;++k) {
+	int l = 0 ;
+	for(;l<4;++l) {
+	  if(flist[k].second[l] == e1 &&
+	     flist[k].second[(l+1)&0x3] == e2) {
+	    break ;
+	  }
+	}
+	if(l != 4) {
+	  hexnodes[cell][4] = flist[k].second[(l+2)&0x3] ;
+	  hexnodes[cell][5] = flist[k].second[(l+3)&0x3] ;
+          list[k-i] = true ;
+          etam[cell] = flist[k].second[4] ;
+	  cnt++ ;
+	}
+      }
+      e1 = hexnodes[cell][3] ;
+      e2 = hexnodes[cell][2] ;
+      for(int k=i+1;k<j;++k) {
+	int l = 0 ;
+	for(;l<4;++l) {
+	  if(flist[k].second[l] == e1 &&
+	     flist[k].second[(l+1)&0x3] == e2) {
+	    break ;
+	  }
+	}
+	if(l != 4) {
+	  hexnodes[cell][6] = flist[k].second[(l+2)&0x3] ;
+	  hexnodes[cell][7] = flist[k].second[(l+3)&0x3] ;
+          list[k-i] = true ;
+          etap[cell] = flist[k].second[4] ;
+	  cnt++ ;
+	}
+      }
+      if(cnt != 2) { 
+	cerr << "unable to reassemble hex cell" << cnt << endl ;
+      }
+      e1 = hexnodes[cell][2] ;
+      e2 = hexnodes[cell][1] ;
+      for(int k=i+1;k<j;++k) {
+	int l = 0 ;
+	for(;l<4;++l) {
+	  if(flist[k].second[l] == e1 &&
+	     flist[k].second[(l+1)&0x3] == e2) {
+	    break ;
+	  }
+	}
+	if(l != 4) {
+          list[k-i] = true ;
+          xip[cell] = flist[k].second[4] ;
+	  cnt++ ;
+	}
+      }
+      e1 = hexnodes[cell][0] ;
+      e2 = hexnodes[cell][3] ;
+      for(int k=i+1;k<j;++k) {
+	int l = 0 ;
+	for(;l<4;++l) {
+	  if(flist[k].second[l] == e1 &&
+	     flist[k].second[(l+1)&0x3] == e2) {
+	    break ;
+	  }
+	}
+	if(l != 4) {
+          list[k-i] = true ;
+          xim[cell] = flist[k].second[4] ;
+	  cnt++ ;
+	}
+      }
+      for(int k=1;k<6;++k)
+        if(list[k] == false)
+          zetap[cell] = flist[k+i].second[4] ;
+    }
+    i = j ;
+  }
+  // Now we have created the element maps, add them to the fact database
+  facts.create_fact("hexnodes",hexnodes) ;
+  facts.create_fact("xip",xip) ;
+  facts.create_fact("xim",xim) ;
+  facts.create_fact("etap",etap) ;
+  facts.create_fact("etam",etam) ;
+  facts.create_fact("zetap",zetap) ;
+  facts.create_fact("zetam",zetam) ;
+}
+
+
+// Helper rules to compute when a change in parametric space occurs between
+// neighboring elements, this is needed because our current grid reader does
+// not guarantee that all elements will have aligned local coordinates.
+
+$rule pointwise(zetap_map<-zetap->(zetap,zetam,etap,etam,xip,xim)) {
+  if($zetap == _e_)
+    $zetap_map = 0 ;
+  else if($zetap->$zetam == _e_)
+    $zetap_map = 0 ;
+  else if($zetap->$zetap == _e_)
+    $zetap_map = 0x04 ;
+  else if($zetap->$xim == _e_)
+    $zetap_map = 0x01 ;
+  else if($zetap->$xip == _e_)
+    $zetap_map = 0x04|0x01 ;
+  else if($zetap->$etam == _e_)
+    $zetap_map = 0x02 ;
+  else if($zetap->$etap == _e_)
+    $zetap_map = 0x04|0x02 ;
+  else
+    cerr << "consistency problem." << endl ;
+  //  if($zetap_map)
+  //    cout << "zetap_map=" << int($zetap_map) << endl ;
+}
+
+$rule pointwise(zetam_map<-zetam->(zetap,zetam,etap,etam,xip,xim)) {
+  if($zetam == _e_)
+    $zetam_map = 0 ;
+  else if($zetam->$zetap == _e_)
+    $zetam_map = 0 ;
+  else if($zetam->$zetam == _e_)
+    $zetam_map = 0x04 ;
+  else if($zetam->$xip == _e_)
+    $zetam_map = 0x01 ;
+  else if($zetam->$xim == _e_)
+    $zetam_map = 0x04|0x01 ;
+  else if($zetam->$etap == _e_)
+    $zetam_map = 0x02 ;
+  else if($zetam->$etam == _e_)
+    $zetam_map = 0x04|0x02 ;
+  else
+    cerr << "consistency problem." << endl ;
+}
+
+$rule pointwise(xip_map<-xip->(zetap,zetam,etap,etam,xip,xim)) {
+  if($xip == _e_)
+    $xip_map = 0x01 ;
+  else if($xip->$zetam == _e_)
+    $xip_map = 0 ;
+  else if($xip->$zetap == _e_)
+    $xip_map = 0x04 ;
+  else if($xip->$xim == _e_)
+    $xip_map = 0x01 ;
+  else if($xip->$xip == _e_)
+    $xip_map = 0x04|0x01 ;
+  else if($xip->$etam == _e_)
+    $xip_map = 0x02 ;
+  else if($xip->$etap == _e_)
+    $xip_map = 0x04|0x02 ;
+  else
+    cerr << "consistency problem." << endl ;
+}
+
+$rule pointwise(xim_map<-xim->(zetap,zetam,etap,etam,xip,xim)) {
+  if($xim == _e_)
+    $xim_map = 0x01 ;
+  else if($xim->$zetap == _e_)
+    $xim_map = 0 ;
+  else if($xim->$zetam == _e_)
+    $xim_map = 0x04 ;
+  else if($xim->$xip == _e_)
+    $xim_map = 0x01 ;
+  else if($xim->$xim == _e_)
+    $xim_map = 0x04|0x01 ;
+  else if($xim->$etap == _e_)
+    $xim_map = 0x02 ;
+  else if($xim->$etam == _e_)
+    $xim_map = 0x04|0x02 ;
+  else
+    cerr << "consistency problem." << endl ;
+}
+   
+$rule pointwise(etap_map<-etap->(zetap,zetam,etap,etam,xip,xim)) {
+  if($etap == _e_)
+    $etap_map = 0x02 ;
+  else if($etap->$zetam == _e_)
+    $etap_map = 0 ;
+  else if($etap->$zetap == _e_)
+    $etap_map = 0x04 ;
+  else if($etap->$xim == _e_)
+    $etap_map = 0x01 ;
+  else if($etap->$xip == _e_)
+    $etap_map = 0x04|0x01 ;
+  else if($etap->$etam == _e_)
+    $etap_map = 0x02 ;
+  else if($etap->$etap == _e_)
+    $etap_map = 0x04|0x02 ;
+  else
+    cerr << "consistency problem." << endl ;
+}
+
+$rule pointwise(etam_map<-etam->(zetap,zetam,etap,etam,xip,xim)) {
+  if($etam == _e_)
+    $etam_map = 0x02 ;
+  else if($etam->$zetap == _e_)
+    $etam_map = 0 ;
+  else if($etam->$zetam == _e_)
+    $etam_map = 0x04 ;
+  else if($etam->$xip == _e_)
+    $etam_map = 0x01 ;
+  else if($etam->$xim == _e_)
+    $etam_map = 0x04|0x01 ;
+  else if($etam->$etap == _e_)
+    $etam_map = 0x02 ;
+  else if($etam->$etam == _e_)
+    $etam_map = 0x04|0x02 ;
+  else
+    cerr << "consistency problem." << endl ;
+}
+
