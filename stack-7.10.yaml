@@ -8,17 +8,17 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: a3eea07b60c53352d79075ef36d942f1817613be
+    commit: 3d6d22693821eb3da29bffded270db27d65ba158
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: 4192d4f573326ce49e7145570c5c54716f992f15
+    commit: d5c94d0a3876f10f69fa6297cb0f380215a31ed9
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: a48fbc77908df54997855c9035b338d28c91d1d3
+    commit: 1d3dde832f1623d14b6edffe146a17e345fed7f1
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -27,12 +27,12 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/lens-accelerate.git
-    commit: c119c9c32d4fbf0d53b8eb906de03fa22ede2e87
+    commit: 00415bf19d76446685053222f90843f75ad6f94b
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: e2eda8c657d207bfc888780b505ff5fdfdf20bb5
+    commit: 665e2f6fd6da4fd47edbfe8e56ebce0e697c95ed
   extra-dep: true
 
 extra-deps:
@@ -50,6 +50,7 @@ flags:
     unsafe-checks: false
     bounds-checks: true
     debug: true
+    ekg: false
     internal-checks: false
   accelerate-llvm:
     debug: true

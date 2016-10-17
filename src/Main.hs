@@ -38,6 +38,7 @@ import Data.Array.Accelerate                            as A
 import Data.Array.Accelerate.Array.Sugar                as S
 import Data.Array.Accelerate.Linear                     as A
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
+import Data.Array.Accelerate.Debug                      ( beginMonitoring )
 
 import Prelude                                          as P hiding ( (<*) )
 import System.IO
@@ -46,6 +47,7 @@ import Text.Printf
 
 main :: IO ()
 main = do
+  beginMonitoring
   (opts,_)      <- parseArgs
 
   let backend   = opts ^. optBackend
