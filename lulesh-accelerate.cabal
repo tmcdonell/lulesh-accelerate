@@ -46,7 +46,7 @@ Flag visit
 Executable lulesh-accelerate
   hs-source-dirs:       src
   main-is:              Main.hs
-  other-modules:        Backend Domain Init LULESH Options Timing Type Util
+  other-modules:        Backend Domain Init LULESH Options Timing Type Util VisIt
 
   ghc-options:          -O2
                         -Wall
@@ -83,7 +83,6 @@ Executable lulesh-accelerate
 
   if flag(visit)
     CPP-options:        -DACCELERATE_VISIT
-    other-modules:      VisIt
     c-sources:          cbits/visit.cc
     extra-libraries:    siloh5 hdf5
 
