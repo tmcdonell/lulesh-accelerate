@@ -23,13 +23,13 @@ Macbook Pro 10,1 (Mid 2012)
   - 8 threads
 
 | Implementation | Compiler | Time (s) | SLOC |
------------------|----------|----------|------|
+-----------------|----------|---------:|-----:|
 | [LULESH-OMP.cc](reference/C/LULESH-OMP.cc) | Clang 3.9.0 | 16.7 | 2400 |
 | [LULESH-OMP.cc](reference/C/LULESH-OMP.cc) | ICC 16.0.4 | 16.6 | 2400 |
 | [CUDA](reference/CUDA/lulesh-kepler-singlegpu) | CUDA 8.0.46 | 8.82 | 3000 |
-| Accelerate (CPU) | GHC 7.10.3, LLVM 3.9 | 9.30 | 1200 |
-| Accelerate (GPU) | GHC 7.10.3, LLVM 3.9 (NVPTX) | 10.35 | 1200 |
-| Accelerate (GPU) | GHC 7.10.3, LLVM 3.8 (NVVM) | 9.82 | 1200 |
+| [accelerate-llvm-native](https://github.com/AccelerateHS/accelerate-llvm) | GHC 7.10.3, LLVM 3.9 | 9.30 | 1200 |
+| [accelerate-llvm-ptx](https://github.com/AccelerateHS/accelerate-llvm) | GHC 7.10.3, LLVM 3.9 (NVPTX) | 10.35 | 1200 |
+| [accelerate-llvm-ptx](https://github.com/AccelerateHS/accelerate-llvm) (-fnvvm) | GHC 7.10.3, LLVM 3.8 (NVVM) | 9.82 | 1200 |
 
 
   [accelerate]:         https://github.com/AccelerateHS/accelerate
