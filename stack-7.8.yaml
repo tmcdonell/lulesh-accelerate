@@ -8,7 +8,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 3d6d22693821eb3da29bffded270db27d65ba158
+    commit: 3fcfaaca82ef754a9521990cbd9382411c5b3fea
   extra-dep: true
 
 - location:
@@ -18,7 +18,7 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 1d3dde832f1623d14b6edffe146a17e345fed7f1
+    commit: 8c2b20090ac07d88bd6b6f27d7bab11e270fa114
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -39,7 +39,7 @@ extra-deps:
 - 'atomic-primops-0.8.0.2'
 - 'base-orphans-0.4.4'
 - 'chaselev-deque-0.5.0.5'
-- 'cuda-0.7.5.0'
+- 'cuda-0.7.5.1'
 - 'libffi-0.1'
 - 'llvm-general-3.4.6.0'
 - 'llvm-general-pure-3.4.5.4'

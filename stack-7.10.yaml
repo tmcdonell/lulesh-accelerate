@@ -1,14 +1,14 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-6.14
+resolver: lts-6.23
 
 packages:
 - '.'
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 3d6d22693821eb3da29bffded270db27d65ba158
+    commit: 3fcfaaca82ef754a9521990cbd9382411c5b3fea
   extra-dep: true
 
 - location:
@@ -17,8 +17,8 @@ packages:
   extra-dep: true
 
 - location:
-    git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 1d3dde832f1623d14b6edffe146a17e345fed7f1
+    git:    https://github.com/tmcdonell/accelerate-llvm.git
+    commit: 8c2b20090ac07d88bd6b6f27d7bab11e270fa114
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -35,13 +35,27 @@ packages:
     commit: 665e2f6fd6da4fd47edbfe8e56ebce0e697c95ed
   extra-dep: true
 
+- location:
+    git:    https://github.com/bscarlet/llvm-general.git
+    commit: ec1ad5bd2112e7f64dbb43441b5e2075cf6ad8e7  # 3.9
+    # commit: 529f9bf117b5ffd1ccf7ebeb679a97b3b1c67938  # 3.8
+  extra-dep: true
+  subdirs:
+    - 'llvm-general'
+    - 'llvm-general-pure'
+
+- location:
+    git:    https://github.com/tmcdonell/nvvm.git
+    commit: 2f9c16ef515766839cee903bb45616ed1d9d375c
+  extra-dep: true
+
 extra-deps:
 - 'chaselev-deque-0.5.0.5'
-- 'cuda-0.7.5.0'
+- 'cuda-0.7.5.1'
 - 'libffi-0.1'
-- 'llvm-general-3.5.1.2'
-- 'llvm-general-pure-3.5.1.0'
-- 'nvvm-0.7.5.0'
+# - 'llvm-general-3.5.1.2'
+# - 'llvm-general-pure-3.5.1.0'
+# - 'nvvm-0.7.5.0'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps
