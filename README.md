@@ -29,7 +29,7 @@ Macbook Pro 10,1 (Mid 2012)
 | [CUDA](reference/CUDA/lulesh-kepler-singlegpu) | CUDA 8.0.46 | 8.82 | 3000 |
 | [accelerate-llvm-native](https://github.com/AccelerateHS/accelerate-llvm) | GHC 7.10.3, LLVM 3.9 | 9.30 | 1200 |
 | [accelerate-llvm-ptx](https://github.com/AccelerateHS/accelerate-llvm) | GHC 7.10.3, LLVM 3.9 (NVPTX) | 10.35 | 1200 |
-| [accelerate-llvm-ptx](https://github.com/AccelerateHS/accelerate-llvm) (-fnvvm) | GHC 7.10.3, LLVM 3.8 (NVVM) | 9.82 | 1200 |
+| [accelerate-llvm-ptx](https://github.com/AccelerateHS/accelerate-llvm) | GHC 7.10.3, LLVM 3.8 (NVVM) | 9.82 | 1200 |
 
 
   [accelerate]:         https://github.com/AccelerateHS/accelerate
