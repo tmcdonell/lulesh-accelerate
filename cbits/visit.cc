@@ -113,7 +113,7 @@ static void writeDomainDB
   optlist = DBMakeOptlist(2);
   ok += DBAddOption(optlist, DBOPT_DTIME, &time);
   ok += DBAddOption(optlist, DBOPT_CYCLE, &step);
-  ok += DBPutUcdmesh(db, "mesh", 3, coordnames, coords, numNode3, numElem3, "connectivity", 0, DB_R, optlist);
+  ok += DBPutUcdmesh(db, "mesh", 3, (char**) coordnames, coords, numNode3, numElem3, "connectivity", 0, DB_R, optlist);
   ok += DBFreeOptlist(optlist);
 
   /*
