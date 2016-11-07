@@ -48,7 +48,7 @@ matrix:
             - happy-1.19.5
             - alex-3.1.7
 
-    - env: GHC=8.0.1 CABAL=1.24 LLVM=3.9.0
+    - env: GHC=8.0.1 CABAL=1.22 LLVM=3.9.0
       compiler: "GHC 8.0"
       addons:
         apt:
@@ -62,7 +62,7 @@ matrix:
             - g++-4.8
             - llvm-3.9-dev
             - libgmp-dev
-            - cabal-install-1.24
+            - cabal-install-1.22
             - happy-1.19.5
             - alex-3.1.7
 
