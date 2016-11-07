@@ -71,7 +71,7 @@ flags:
     cuda: false
     llvm-cpu: true
     llvm-gpu: true
-    visit: true
+    visit: false
   llvm-general:
     shared-llvm: true
 
