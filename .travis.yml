@@ -29,6 +29,8 @@ matrix:
             - cabal-install-1.18
             - happy-1.19.5
             - alex-3.1.7
+            - libhdf5-dev
+            - libsilo-dev
 
     - env: GHC=7.10.3 CABAL=1.22 LLVM=3.9.0
       compiler: "GHC 7.10"
@@ -47,6 +49,8 @@ matrix:
             - cabal-install-1.22
             - happy-1.19.5
             - alex-3.1.7
+            - libhdf5-dev
+            - libsilo-dev
 
     - env: GHC=8.0.1 CABAL=1.22 LLVM=3.9.0
       compiler: "GHC 8.0"
@@ -65,6 +69,8 @@ matrix:
             - cabal-install-1.22
             - happy-1.19.5
             - alex-3.1.7
+            - libhdf5-dev
+            - libsilo-dev
 
   fast_finish: true
 
@@ -100,7 +106,7 @@ script:
         cabal install
         cabal haddock
       else
-        stack build --no-terminal --haddock --no-haddock-deps
+        stack build --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:visit
       fi
 
 after_success:
