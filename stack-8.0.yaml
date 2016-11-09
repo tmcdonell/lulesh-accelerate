@@ -1,24 +1,24 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-7.6
+resolver: lts-7.8
 
 packages:
 - '.'
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 3fcfaaca82ef754a9521990cbd9382411c5b3fea
+    commit: 2e914a46f29a0620d87cac78f3c03dd7927d09c8
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: d5c94d0a3876f10f69fa6297cb0f380215a31ed9
+    commit: 3ff507ce7e76312187a18ccd78d25679620c9d59
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 8c2b20090ac07d88bd6b6f27d7bab11e270fa114
+    commit: 932e4ff0cb7d77fccd6d44580646cec9fb8d0083
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -48,7 +48,7 @@ extra-deps:
 - 'chaselev-deque-0.5.0.5'
 - 'cuda-0.7.5.1'
 - 'libffi-0.1'
-- 'nvvm-0.7.5.0'
+- 'nvvm-0.7.5.1'
 - 'unique-0'
 
 # Override default flag values for local packages and extra-deps
