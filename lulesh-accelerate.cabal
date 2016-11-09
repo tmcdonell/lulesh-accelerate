@@ -69,17 +69,17 @@ Executable lulesh-accelerate
   if flag(cuda)
     CPP-options:        -DACCELERATE_CUDA_BACKEND
     build-depends:
-        accelerate-cuda         == 2.0.*
+        accelerate-cuda         >= 0.15
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
     build-depends:
-        accelerate-llvm-native  == 2.0.*
+        accelerate-llvm-native  >= 0.15
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
-        accelerate-llvm-ptx     == 2.0.*
+        accelerate-llvm-ptx     >= 0.15
 
   if flag(visit)
     CPP-options:        -DACCELERATE_VISIT
