@@ -35,12 +35,14 @@ data Backend = Interpreter
 #ifdef ACCELERATE_CUDA_BACKEND
              | CUDA
 #endif
-  deriving (P.Eq, P.Bounded)
+  deriving (P.Eq, P.Enum, P.Bounded)
 
 -- | The default backend to use
 --
 defaultBackend :: Backend
-defaultBackend = maxBound
+defaultBackend
+  | maxBound == Interpreter = Interpreter
+  | otherwise               = succ Interpreter
 
 
 -- The choice of show instance is important because this will be used to
@@ -48,41 +50,41 @@ defaultBackend = maxBound
 --
 instance Show Backend where
   show Interpreter      = "interpreter"
-#ifdef ACCELERATE_CUDA_BACKEND
-  show CUDA             = "cuda"
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   show CPU              = "llvm-cpu"
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
-  show PTX              = "llvm-gpu"
+  show PTX              = "llvm-ptx"
+#endif
+#ifdef ACCELERATE_CUDA_BACKEND
+  show CUDA             = "cuda"
 #endif
 
 -- | Execute Accelerate expressions
 --
 run :: Arrays a => Backend -> Acc a -> a
 run Interpreter = Interp.run
-#ifdef ACCELERATE_CUDA_BACKEND
-run CUDA        = CUDA.run
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 run CPU         = CPU.run
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run PTX         = PTX.run
 #endif
+#ifdef ACCELERATE_CUDA_BACKEND
+run CUDA        = CUDA.run
+#endif
 
 
 run1 :: (Arrays a, Arrays b) => Backend -> (Acc a -> Acc b) -> a -> b
 run1 Interpreter = Interp.run1
-#ifdef ACCELERATE_CUDA_BACKEND
-run1 CUDA        = CUDA.run1
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 run1 CPU         = CPU.run1
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 run1 PTX         = PTX.run1
+#endif
+#ifdef ACCELERATE_CUDA_BACKEND
+run1 CUDA        = CUDA.run1
 #endif
 
 
@@ -116,11 +118,6 @@ availableBackends optBackend =
             (NoArg (set optBackend Interpreter))
             "reference implementation (sequential)"
 
-#ifdef ACCELERATE_CUDA_BACKEND
-  , Option  [] [show CUDA]
-            (NoArg (set optBackend CUDA))
-            "implementation for NVIDIA GPUs (parallel)"
-#endif
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
   , Option  [] [show CPU]
             (NoArg (set optBackend CPU))
@@ -130,6 +127,11 @@ availableBackends optBackend =
   , Option  [] [show PTX]
             (NoArg (set optBackend PTX))
             "LLVM based implementation for NVIDIA GPUs (parallel)"
+#endif
+#ifdef ACCELERATE_CUDA_BACKEND
+  , Option  [] [show CUDA]
+            (NoArg (set optBackend CUDA))
+            "CUDA based implementation for NVIDIA GPUs (parallel)"
 #endif
   ]
 
