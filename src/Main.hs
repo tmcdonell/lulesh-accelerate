@@ -34,13 +34,13 @@ import Timing                                           ( time )
 import Type
 import VisIt
 
-import Data.Array.Accelerate                            as A
+import Data.Array.Accelerate                            as A hiding ( Ord(..) )
 import Data.Array.Accelerate.Array.Sugar                as S
 import Data.Array.Accelerate.Linear                     as A
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
 import Data.Array.Accelerate.Debug                      ( beginMonitoring )
 
-import Prelude                                          as P hiding ( (<*) )
+import Prelude                                          as P
 import System.IO
 import Text.Printf
 
@@ -109,8 +109,8 @@ main = do
           awhile
             -- loop condition
             undefined
-            -- (\domain -> A.zipWith (&&*) (A.map (<* t_end parameters)  (elapsed domain))
-            --                             (A.map (<* constant maxSteps) (iteration domain)))
+            -- (\domain -> A.zipWith (&&) (A.map (< t_end parameters)  (elapsed domain))
+            --                            (A.map (< constant maxSteps) (iteration domain)))
             -- loop body
             (\domain ->
                 let

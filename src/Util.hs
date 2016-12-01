@@ -8,8 +8,8 @@ module Util where
 
 import Type
 
-import Prelude                                          as P hiding ( (<*) )
-import Data.Array.Accelerate                            as A hiding ( transpose )
+import Prelude                                          as P ( fromInteger, (==) )
+import Data.Array.Accelerate                            as A hiding ( transpose, (==) )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
 
@@ -59,7 +59,7 @@ distributeToNode f zero arr =
          -> Lens' (Exp (Hexahedron a)) (Exp a)
          -> Exp a
       at z y x node =
-        if 0 <=* z &&* z <* numElem &&* 0 <=* y &&* y <* numElem &&* 0 <=* x &&* x <* numElem
+        if 0 <= z && z < numElem && 0 <= y && y < numElem && 0 <= x && x < numElem
            then (arr ! index3 z y x) ^. node
            else zero
 

@@ -40,9 +40,10 @@ data Backend = Interpreter
 -- | The default backend to use
 --
 defaultBackend :: Backend
-defaultBackend
-  | maxBound == Interpreter = Interpreter
-  | otherwise               = succ Interpreter
+defaultBackend =
+  case maxBound of
+    Interpreter -> Interpreter
+    _           -> succ Interpreter
 
 
 -- The choice of show instance is important because this will be used to

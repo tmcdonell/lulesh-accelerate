@@ -8,17 +8,17 @@ packages:
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate.git
-    commit: 2e914a46f29a0620d87cac78f3c03dd7927d09c8
+    commit: ed02d0ab0fc1d4430193efe12c92d9d77239e68c
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-cuda.git
-    commit: 3ff507ce7e76312187a18ccd78d25679620c9d59
+    commit: cd8d31c24717ab1041057d1979113689ac79fead
   extra-dep: true
 
 - location:
     git:    https://github.com/AccelerateHS/accelerate-llvm.git
-    commit: 932e4ff0cb7d77fccd6d44580646cec9fb8d0083
+    commit: 708389da8fbf7048a8d68b3eb6eb500aa43e7ea1
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -32,7 +32,7 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/linear-accelerate.git
-    commit: 665e2f6fd6da4fd47edbfe8e56ebce0e697c95ed
+    commit: 555415fc48459e33a943de5a52e8c3ca8501f3fa
   extra-dep: true
 
 extra-deps:

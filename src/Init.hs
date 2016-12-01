@@ -6,9 +6,11 @@ module Init where
 import Options
 import Type
 
-import Prelude                                  as P hiding ( (<*) )
 import Data.Array.Accelerate                    as A
 import Data.Array.Accelerate.Linear             as A
+
+import Prelude                                  ( fromInteger )
+import qualified Prelude                        as P
 
 
 -- | Deposit some energy at the origin. The simulation is symmetric so we only
@@ -21,7 +23,7 @@ initEnergy numElem =
 
       f :: Exp Ix -> Exp Energy
       f (unlift -> Z :. z :. y :. x) =
-        if z ==* 0 &&* y ==* 0 &&* x ==* 0
+        if z == 0 && y == 0 && x == 0
            then 3.948746e+7
            else 0
   in
@@ -87,9 +89,9 @@ initNodeMass numElem =
       v = w * h * d
 
       at z y x =
-        if 0 <=* z &&* z <* constant numElem &&*
-           0 <=* y &&* y <* constant numElem &&*
-           0 <=* x &&* x <* constant numElem
+        if 0 <= z && z < constant numElem &&
+           0 <= y && y < constant numElem &&
+           0 <= x && x < constant numElem
            then v
            else 0
 

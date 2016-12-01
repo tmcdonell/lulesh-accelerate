@@ -22,11 +22,14 @@ import Domain
 import Type
 import Util
 
-import Data.Foldable                                    as F
 import Data.Array.Accelerate                            as A hiding ( transpose )
 import Data.Array.Accelerate.Linear                     as L hiding ( Epsilon )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
-import Prelude                                          as P hiding ( (<*) )
+
+import Data.Foldable                                    as F
+import Data.Functor                                     as F
+import Prelude                                          ( fromInteger )
+import qualified Prelude                                as P
 
 
 -- Lagrange Leapfrog Algorithm
@@ -165,7 +168,7 @@ calcVolumeForceForElems param x dx p q v v0 ss mZ =
       (stress, determ)  = integrateStressForElems x sigma
 
       -- TODO: check for negative element volume
-      _volumeError      = A.any (<=* 0) determ
+      _volumeError      = A.any (<= 0) determ
 
       -- Calculate the hourglass control contribution for each element
       hourglass         = A.generate (shape v0)
@@ -402,7 +405,7 @@ calcHourglassControlForElem param@Parameters{..} x dx v v0 ss mZ =
       dv        = calcElemVolumeDerivative x
       determ    = v * v0
   in
-  if hgcoef >* 0
+  if hgcoef > 0
      then calcFBHourglassForceForElem param x dx determ dv ss mZ
      else constant (0,0,0,0,0,0,0,0)
 
@@ -520,9 +523,9 @@ applyAccelerationBoundaryConditionsForNodes acc =
         Z :. z :. y :. x        = unlift ix
         V3 ddx ddy ddz          = unlift $ acc ! ix
     in
-    lift $ V3 (x ==* 0 ? (0, ddx))
-              (y ==* 0 ? (0, ddy))
-              (z ==* 0 ? (0, ddz))
+    lift $ V3 (x == 0 ? (0, ddx))
+              (y == 0 ? (0, ddy))
+              (z == 0 ? (0, ddz))
 
 
 -- | Integrate the acceleration at each node to advance the velocity at the
@@ -541,7 +544,7 @@ calcVelocityForNodes
     -> Acc (Field Acceleration)
     -> Acc (Field Velocity)
 calcVelocityForNodes Parameters{..} dt u ud
-  = A.map (over each (\x -> abs x <* u_cut ? (0,x)))
+  = A.map (over each (\x -> abs x < u_cut ? (0,x)))
   $ integrate dt u ud
 
 -- | Integrate the velocity at each node to advance the position of the node
@@ -639,7 +642,7 @@ calcLagrangeElements dt x dx v v0 =
                     (v0!ix)
 
       -- TODO: Check for negative element volume
-      _volumeError = A.any (<=* 0) v'
+      _volumeError = A.any (<= 0) v'
   in
   (v', dv', vdov, arealg)
 
@@ -739,7 +742,7 @@ calcElemCharacteristicLength x v =
 
       area = P.maximum
            $ P.map faceArea
-           $ P.map (flip collectFace x) [0..5]
+           $ P.map (P.flip collectFace x) [0..5]
   in
   4.0 * v / sqrt area
 
@@ -816,7 +819,7 @@ calcQForElems params x dx v v0 mZ vdov =
         = calcMonotonicQForElems params grad_p grad_v v v0 mZ vdov
 
       -- TODO: don't allow excessive artificial viscosity
-      -- _viscosityError = A.any (>* qstop) q
+      -- _viscosityError = A.any (> qstop) q
   in
   (ql, qq)
 
@@ -895,7 +898,7 @@ calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov 
       --
       get :: Exp Int -> Exp Int -> Exp Int -> Exp (Gradient Velocity)
       get z y x =
-        if x >=* numElem ||* y >=* numElem ||* z >=* numElem
+        if x >= numElem || y >= numElem || z >= numElem
            then zero                                                -- external face
            else grad_v ! index3 (A.max 0 z) (A.max 0 y) (A.max 0 x) -- internal region
 
@@ -929,7 +932,7 @@ calcMonotonicQForElems Parameters{..} grad_x grad_v volNew volRef elemMass vdov 
             qlin        = -qlc_monoq * rho * dot dvx       (1 - phi)
             qquad       =  qqc_monoq * rho * dot (dvx*dvx) (1 - phi*phi)
         in
-        if vdov ! ix >* 0
+        if vdov ! ix > 0
            then constant (0,0)
            else lift (qlin, qquad)
   in
@@ -954,8 +957,8 @@ calcEOSForElem
     -> Exp (Pressure, Energy, Viscosity, R)
 calcEOSForElem param@Parameters{..} vol delta_vol e p q ql qq =
   let
-      clamp     = (\x -> if eosvmin /=* 0 then A.max eosvmin x else x)
-                . (\x -> if eosvmax /=* 0 then A.min eosvmax x else x)
+      clamp     = (\x -> if eosvmin /= 0 then A.max eosvmin x else x)
+                . (\x -> if eosvmax /= 0 then A.min eosvmax x else x)
 
       vol'      = clamp vol
 
@@ -989,26 +992,26 @@ calcEnergyForElem params@Parameters{..} e0 p0 q0 ql qq comp comp_half vol vol_de
       e1                = e_min `A.max` (e0 - 0.5 * vol_delta * (p0 + q0) + 0.5 * work)
       (p1, bvc1, pbvc1) = calcPressureForElem params e1 vol comp_half
       ssc1              = calcSoundSpeedForElem params (1/(1+comp_half)) e1 p1 bvc1 pbvc1
-      q1                = vol_delta >* 0 ? (0, ssc1 * ql + qq )
+      q1                = vol_delta > 0 ? (0, ssc1 * ql + qq )
 
       e2                = let e = e1
                                 + 0.5 * vol_delta * (3.0 * (p0 + q0) - 4.0 * (p1 + q1))
                                 + 0.5 * work
                           in
-                          abs e <* e_cut ? (0, A.max e_min e )
+                          abs e < e_cut ? (0, A.max e_min e )
       (p2, bvc2, pbvc2) = calcPressureForElem params e2 vol comp
       ssc2              = calcSoundSpeedForElem params vol e2 p2 bvc2 pbvc2
-      q2                = vol_delta >* 0 ? (0, ssc2 * ql + qq)
+      q2                = vol_delta > 0 ? (0, ssc2 * ql + qq)
 
       e3                = let e = e2 - 1/6 * vol_delta * ( 7.0 * (p0 + q0)
                                                          - 8.0 * (p1 + q1)
                                                          +       (p2 + q2) )
                           in
-                          abs e <* e_cut ? (0, A.max e_min e)
+                          abs e < e_cut ? (0, A.max e_min e)
       (p3, bvc3, pbvc3) = calcPressureForElem params e3 vol comp
       ssc3              = calcSoundSpeedForElem params vol e3 p3 bvc3 pbvc3
       q3                = let q = ssc3 * ql + qq
-                          in abs q <* q_cut ? (0, q)
+                          in abs q < q_cut ? (0, q)
   in
   (e3, p3, q3, bvc3, pbvc3)
 
@@ -1030,7 +1033,7 @@ calcPressureForElem Parameters{..} e vol comp =
       bvc       = c1s * (comp + 1)
       pbvc      = c1s
       p_new     = bvc * e
-      p_new'    = if abs p_new <* p_cut ||* vol >=* eosvmax
+      p_new'    = if abs p_new < p_cut || vol >= eosvmax
                      then 0
                      else p_new
   in
@@ -1053,7 +1056,7 @@ calcSoundSpeedForElem Parameters{..} v e p bvc pbvc =
   let
       ss = (pbvc * e + v * v * p * bvc ) / ref_dens
   in
-  if ss <=* 1.111111e-36
+  if ss <= 1.111111e-36
      then 0.333333e-18
      else sqrt ss
 
@@ -1067,7 +1070,7 @@ updateVolumeForElem
     -> Exp Volume
     -> Exp Volume
 updateVolumeForElem Parameters{..} vol =
-  if abs (vol - 1) <* v_cut
+  if abs (vol - 1) < v_cut
      then 1
      else vol
 
@@ -1108,13 +1111,13 @@ calcCourantConstraintForElem
     -> Exp R            -- characteristic length
     -> Exp Time
 calcCourantConstraintForElem Parameters{..} ss vdov arealg =
-  if vdov ==* 0
+  if vdov == 0
      then 1.0e20
      else let
               qqc'      = 64 * qqc * qqc
               dtf       = ss * ss
-                        + if vdov >=* 0 then 0
-                                        else qqc' * arealg * arealg * vdov * vdov
+                        + if vdov >= 0 then 0
+                                       else qqc' * arealg * arealg * vdov * vdov
           in
           arealg / sqrt dtf
 
@@ -1129,7 +1132,7 @@ calcHydroConstraintForElem
     -> Exp R            -- vdot / v
     -> Exp Time
 calcHydroConstraintForElem Parameters{..} vdov =
-  if vdov ==* 0
+  if vdov == 0
      then 1.0e20
      else dvovmax / (abs vdov + 1.0e-20)
 
@@ -1164,7 +1167,7 @@ timeIncrement' Parameters{..} t_now dt_old dt_courant dt_hydro =
       (lb,ub)   = dt_scaling
 
       -- try to prevent very small scaling on the next cycle
-      target    = if dt_end >* step &&* dt_end <* 4 * step / 3
+      target    = if dt_end > step && dt_end < 4 * step / 3
                      then 2 / 3 * step
                      else dt_end
 
@@ -1172,13 +1175,13 @@ timeIncrement' Parameters{..} t_now dt_old dt_courant dt_hydro =
       step      = A.min dt_new dt_max
 
       c1        = 1.0e20
-      c2        = if dt_courant <* c1 then 0.5 * dt_courant else c1
-      c3        = if dt_hydro   <* c2 then 2/3 * dt_hydro   else c2
+      c2        = if dt_courant < c1 then 0.5 * dt_courant else c1
+      c3        = if dt_hydro   < c2 then 2/3 * dt_hydro   else c2
 
       ratio     = c3 / dt_old
       dt_new    = caseof ratio
-                [ (\r -> r >=* 1 &&* r <* lb, dt_old)
-                , (\r -> r >=* 1 &&* r >* ub, dt_old * ub)
+                [ (\r -> r >= 1 && r < lb, dt_old)
+                , (\r -> r >= 1 && r > ub, dt_old * ub)
                 ]
                 c3
 
