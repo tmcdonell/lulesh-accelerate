@@ -28,15 +28,15 @@ cabal-version:          >=1.10
 
 Flag cuda
   Description:          Enable the CUDA parallel backend for NVIDIA GPUs
-  Default:              True
+  Default:              False
 
 Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
-  Default:              False
+  Default:              True
 
 Flag llvm-gpu
   Description:          Enable the LLVM backend for NVIDIA CPUs
-  Default:              False
+  Default:              True
 
 Flag visit
   Description:          Enable writing output files suitable for visualisation
