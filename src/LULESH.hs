@@ -1092,8 +1092,8 @@ calcTimeConstraints
        , Acc (Scalar Time) )
 calcTimeConstraints param ss vdov arealg =
   let
-      dt_courant        = A.minimum $ A.zipWith3 (calcCourantConstraintForElem param) ss vdov arealg
-      dt_hydro          = A.minimum $ A.map      (calcHydroConstraintForElem   param) vdov
+      dt_courant        = A.minimum . A.flatten $ A.zipWith3 (calcCourantConstraintForElem param) ss vdov arealg
+      dt_hydro          = A.minimum . A.flatten $ A.map      (calcHydroConstraintForElem   param) vdov
   in
   (dt_courant, dt_hydro)
 

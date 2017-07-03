@@ -98,7 +98,7 @@ main = do
             write i dom
             simulate (i+1) dom'
         where
-          go = run1 backend step
+          !go = run1 backend step
 
 {--
       lulesh :: Acc (Field Volume)
