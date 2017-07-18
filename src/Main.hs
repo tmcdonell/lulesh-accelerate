@@ -1,6 +1,10 @@
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE CPP          #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE BangPatterns    #-}
+{-# LANGUAGE CPP             #-}
+{-# LANGUAGE GADTs           #-}
+{-# LANGUAGE TemplateHaskell #-}
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+{-# OPTIONS_GHC -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin #-}
+#endif
 -- |
 -- Module       : Main
 -- Copyright    : [2015] Trevor L. McDonell
@@ -44,6 +48,13 @@ import Prelude                                          as P
 import System.IO
 import Text.Printf
 
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+import qualified Data.Array.Accelerate.LLVM.Native      as CPU
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
+#endif
+
 
 main :: IO ()
 main = do
@@ -62,8 +73,8 @@ main = do
       p0        = zeros
       q0        = zeros
       ss0       = zeros
-      mN0       = initNodeMass numElem
-      v0        = initElemVolume numElem
+      mN0       = run backend $ initNodeMass numElem
+      v0        = run backend $ initElemVolume numElem
       vrel0     = A.fill (constant (Z:.numElem:.numElem:.numElem)) 1
       zeros     = A.fill (constant (Z:.numElem:.numElem:.numElem)) 0
       dt0       = unit 1.0e-7
@@ -76,58 +87,23 @@ main = do
       initial :: Acc Domain
       initial = lift (x0, dx0, e0, p0, q0, vrel0, ss0, t0, dt0)
 
-      step :: Acc Domain -> Acc Domain
-      step domain =
-        let
-            (x, dx, e, p, q, v, ss, t, dt) = unlift domain
-
-            (x', dx', e', p', q', v', ss', dtc, dth)
-                = lagrangeLeapFrog parameters (the dt) x dx e p q v v0 ss v0 mN0
-
-            (t', dt')
-                = timeIncrement parameters t dt dtc dth
-        in
-        lift (x', dx', e', p', q', v', ss', t', dt')
-
       simulate :: Int -> Domain -> IO (Domain, Int)
       simulate !i !dom@(_, _, _, _, _, _, _, t, _)
         | i                >= maxSteps         = return (dom, i)
         | t `indexArray` Z >= t_end parameters = return (dom, i)
         | otherwise                            = do
-            let !dom' = go dom
+            let !dom' = step dom
             write i dom
             simulate (i+1) dom'
         where
-          !go = run1 backend step
-
-{--
-      lulesh :: Acc (Field Volume)
-             -> Acc (Field Mass)
-             -> Acc Domain
-             -> Acc Domain
-      lulesh v0 mN0 dom0 =
-          awhile
-            -- loop condition
-            undefined
-            -- (\domain -> A.zipWith (&&) (A.map (< t_end parameters)  (elapsed domain))
-            --                            (A.map (< constant maxSteps) (iteration domain)))
-            -- loop body
-            (\domain ->
-                let
-                    (x, dx, e, p, q, v, ss, r) = unlift domain
-                    (t, dt, n)                 = unlift (r :: Acc (Scalar Time, Scalar Time, Scalar Int))
-
-                    (x', dx', e', p', q', v', ss', dtc, dth)
-                        = lagrangeLeapFrog parameters (the dt) x dx e p q v v0 ss v0 mN0
-
-                    (t', dt')
-                        = timeIncrement parameters t dt dtc dth
-
-                    n'  = A.map (+1) n
-                in
-                lift (x', dx', e', p', q', v', ss', (t', dt', n')))
-            dom0
---}
+          !step = case backend of
+#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+            CPU -> $( CPU.runQ lulesh ) mN0 v0
+#endif
+#ifdef ACCELERATE_LLVM_PTX_BACKEND
+            PTX -> $( PTX.runQ lulesh ) mN0 v0
+#endif
+            _   -> run1 backend (lulesh (A.use mN0) (A.use v0))
 
   -- Problem description
   --

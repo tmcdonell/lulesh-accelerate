@@ -89,27 +89,6 @@ run1 CUDA        = CUDA.run1
 #endif
 
 
-run2 :: (Arrays a, Arrays b, Arrays c) => Backend -> (Acc a -> Acc b -> Acc c) -> a -> b -> c
-run2 backend f =
-  let !go = run1 backend (A.uncurry f)
-  in \x y -> go (x, y)
-
-run3 :: forall a b c d. (Arrays a, Arrays b, Arrays c, Arrays d)
-     => Backend
-     -> (Acc a -> Acc b -> Acc c -> Acc d)
-     -> a -> b -> c -> d
-run3 backend f =
-  let !go = run1 backend (uncurry3 f)
-  in  \x y z -> go (x, y, z)
-
-uncurry3
-    :: Unlift f (f a, f b, f c)
-    => (f a -> f b -> f c -> f d)
-    -> f (Plain (f a), Plain (f b), Plain (f c))
-    -> f d
-uncurry3 f argv = let (a, b, c) = unlift argv in f a b c
-
-
 -- | The set of available backnds. This will be used for both the command line
 -- options as well as the fancy header generation.
 --

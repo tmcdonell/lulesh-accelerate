@@ -77,13 +77,14 @@ Executable lulesh-accelerate
 
   if flag(llvm-cpu)
     CPP-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
+    ghc-options:        -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin
     build-depends:
-        accelerate-llvm-native  >= 0.15
+        accelerate-llvm-native  >= 1.0.0.0
 
   if flag(llvm-gpu)
     CPP-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
-        accelerate-llvm-ptx     >= 0.15
+        accelerate-llvm-ptx     >= 1.0.0.0
 
   if flag(visit)
     CPP-options:        -DACCELERATE_VISIT

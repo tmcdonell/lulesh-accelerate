@@ -32,6 +32,27 @@ import Prelude                                          ( fromInteger )
 import qualified Prelude                                as P
 
 
+-- | Take a single time step of the LULESH algorithm
+--
+lulesh
+    :: Acc (Field Mass)         -- reference nodal mass
+    -> Acc (Field Volume)       -- reference volume
+    -> Acc Domain               -- current simulation parameters
+    -> Acc Domain               -- updated simulation state
+lulesh mN0 v0 domain =
+  let
+    (x, dx, e, p, q, v, ss, t, dt)
+      = unlift domain
+
+    (x', dx', e', p', q', v', ss', dtc, dth)
+      = lagrangeLeapFrog parameters (the dt) x dx e p q v v0 ss v0 mN0
+
+    (t', dt')
+      = timeIncrement parameters t dt dtc dth
+  in
+  lift (x', dx', e', p', q', v', ss', t', dt')
+
+
 -- Lagrange Leapfrog Algorithm
 -- ===========================
 
