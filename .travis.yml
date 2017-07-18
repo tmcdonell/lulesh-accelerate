@@ -80,7 +80,7 @@ install:
       if [ ${GHC} == head -o ! -e stack.yaml ]; then
         travis_retry cabal install --only-dependencies || exit 1
       else
-        travis_retry stack build --only-dependencies --fast --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-ptx --flag lulesh-accelerate:visit || exit 1
+        travis_retry stack build --only-dependencies --fast --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit || exit 1
       fi
 
 script:
@@ -89,7 +89,7 @@ script:
         cabal install || exit 1
         cabal haddock || exit 1
       else
-        stack build --fast --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:-llvm-ptx --flag lulesh-accelerate:visit || exit 1
+        stack build --fast --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit || exit 1
       fi
 
 after_success:
