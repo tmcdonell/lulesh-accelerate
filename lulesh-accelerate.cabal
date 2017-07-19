@@ -77,9 +77,17 @@ Executable lulesh-accelerate
 
   if flag(llvm-cpu)
     cpp-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
-    ghc-options:        -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin
     build-depends:
         accelerate-llvm-native  >= 1.0.0.0
+
+    -- A GHC bug prevents us from running the plugin when visit is enabled:
+    --
+    -- > ghc: panic! (the 'impossible' happened)
+    -- >   (GHC version 7.10.3 for x86_64-unknown-linux):
+    -- >        Loading temp shared object failed: /tmp/ghc19665_0/libghc_6.so: undefined symbol: Silo_version_4_10_2
+    --
+    if impl(ghc >= 8.0)
+      ghc-options:      -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin
 
   if flag(llvm-gpu)
     cpp-options:        -DACCELERATE_LLVM_PTX_BACKEND

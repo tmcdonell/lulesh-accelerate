@@ -48,11 +48,13 @@ import Prelude                                          as P
 import System.IO
 import Text.Printf
 
+#if __GLASGOW_HASKELL__ >= 800
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
 import qualified Data.Array.Accelerate.LLVM.Native      as CPU
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
 import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
+#endif
 #endif
 
 
