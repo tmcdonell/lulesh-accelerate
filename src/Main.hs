@@ -97,11 +97,13 @@ main = do
             simulate (i+1) dom'
         where
           !step = case backend of
+#if __GLASGOW_HASKELL__ >= 800
 #ifdef ACCELERATE_LLVM_NATIVE_BACKEND
             CPU -> $( CPU.runQ lulesh ) mN0 v0
 #endif
 #ifdef ACCELERATE_LLVM_PTX_BACKEND
             PTX -> $( PTX.runQ lulesh ) mN0 v0
+#endif
 #endif
             _   -> run1 backend (lulesh (A.use mN0) (A.use v0))
 
