@@ -62,8 +62,8 @@ Executable lulesh-accelerate
 
   default-language:     Haskell2010
   build-depends:
-      base                      >= 4.6
-    , accelerate                >= 0.15
+      base                      >= 4.6 && < 4.11
+    , accelerate                >= 1.0
     , ansi-wl-pprint            >= 0.6
     , lens                      >= 4
     , lens-accelerate           >= 0.1
@@ -78,7 +78,7 @@ Executable lulesh-accelerate
   if flag(llvm-cpu)
     cpp-options:        -DACCELERATE_LLVM_NATIVE_BACKEND
     build-depends:
-        accelerate-llvm-native  >= 1.0.0.0
+        accelerate-llvm-native  >= 1.1.0.0
 
     -- A GHC bug prevents us from running the plugin when visit is enabled:
     --
@@ -92,7 +92,7 @@ Executable lulesh-accelerate
   if flag(llvm-gpu)
     cpp-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
-        accelerate-llvm-ptx     >= 1.0.0.0
+        accelerate-llvm-ptx     >= 1.1.0.0
 
   if flag(visit)
     cpp-options:        -DACCELERATE_VISIT

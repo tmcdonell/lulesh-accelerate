@@ -1,19 +1,19 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-8.0
+resolver: lts-9.0
 
 packages:
 - '.'
 
 - location:
     git:    https://github.com/tmcdonell/accelerate.git
-    commit: 75b48553724c9e48dacbde2ee693cde7d066a6db
+    commit: aee5f0232e2cfdcf030e2a7ca0570e9ced017d63
   extra-dep: true
 
 - location:
     git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 4f63abc235ba84d0fe87ce6a791ef157aaab635f
+    commit: 3bc4216e527fa77149259dd19d3d4103ffed9518
   extra-dep: true
   subdirs:
     - 'accelerate-llvm'
@@ -22,47 +22,24 @@ packages:
 
 - location:
     git:    https://github.com/tmcdonell/cuda.git
-    commit: 1bff17152088384b71a439b01ec993a54e2618c9
+    commit: c39da756025d7a6fd9fb3fd368736ee05ced5df2
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/nvvm.git
+    commit: 632323e2a7c3c75bb07a3edb35de47273dc4cd07
   extra-dep: true
 
 extra-deps:
-# - 'accelerate-1.0.0.0'
-# - 'accelerate-llvm-1.0.0.0'
-# - 'accelerate-llvm-native-1.0.0.0'
-# - 'accelerate-llvm-ptx-1.0.0.0'
-- 'chaselev-deque-0.5.0.5'
-# - 'cuda-0.7.5.3'
 - 'lens-accelerate-0.1.0.0'
-- 'libffi-0.1'
-- 'linear-accelerate-0.4'
-- 'llvm-hs-4.1.0.0'
-- 'llvm-hs-pure-4.1.0.0'
-- 'nvvm-0.7.5.2'
-- 'unique-0'
+- 'linear-accelerate-0.5'
 
 # Override default flag values for local packages and extra-deps
 flags:
-  accelerate:
-    unsafe-checks: false
-    bounds-checks: true
-    debug: true
-    ekg: true
-    internal-checks: false
-  accelerate-llvm:
-    debug: true
-    chase-lev: true
-  accelerate-llvm-native:
-    debug: true
-  accelerate-llvm-ptx:
-    debug: true
-    nvvm: false
   lulesh-accelerate:
-    cuda: false
     llvm-cpu: true
     llvm-gpu: true
     visit: false
-  llvm-hs:
-    shared-llvm: true
 
 # Extra package databases containing global packages
 extra-package-dbs: []
