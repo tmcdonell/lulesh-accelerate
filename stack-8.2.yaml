@@ -1,0 +1,125 @@
+# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
+# vim: nospell
+
+resolver: ghc-8.2
+
+packages:
+- '.'
+
+- location:
+    git:    https://github.com/tmcdonell/accelerate.git
+    commit: aee5f0232e2cfdcf030e2a7ca0570e9ced017d63
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/accelerate-llvm.git
+    commit: 3bc4216e527fa77149259dd19d3d4103ffed9518
+  extra-dep: true
+  subdirs:
+    - 'accelerate-llvm'
+    - 'accelerate-llvm-native'
+    - 'accelerate-llvm-ptx'
+
+- location:
+    git:    https://github.com/tmcdonell/cuda.git
+    commit: c39da756025d7a6fd9fb3fd368736ee05ced5df2
+  extra-dep: true
+
+- location:
+    git:    https://github.com/tmcdonell/nvvm.git
+    commit: 632323e2a7c3c75bb07a3edb35de47273dc4cd07
+  extra-dep: true
+
+extra-deps:
+- 'abstract-deque-0.3'
+- 'adjunctions-4.3'
+- 'ansi-terminal-0.6.3.1'
+- 'ansi-wl-pprint-0.6.8.1'
+- 'atomic-primops-0.8.1'
+- 'attoparsec-0.13.2.0'
+- 'base-orphans-0.6'
+- 'bifunctors-5.4.2'
+- 'bytes-0.15.3'
+- 'cabal-doctest-1.0.2'
+- 'call-stack-0.1.0'
+- 'cereal-0.5.4.0'
+- 'chaselev-deque-0.5.0.5'
+- 'comonad-5.0.2'
+- 'contravariant-1.4'
+- 'data-default-class-0.1.2.0'
+- 'distributive-0.5.3'
+- 'dlist-0.8.0.3'
+- 'exceptions-0.8.3'
+- 'fail-4.9.0.0'
+- 'fclabels-2.0.3.2'
+- 'file-embed-0.0.10'
+- 'free-4.12.4'
+- 'hashable-1.2.6.1'
+- 'hashtables-1.2.1.1'
+- 'integer-logarithms-1.0.2'
+- 'kan-extensions-5.0.2'
+- 'lens-4.15.4'
+- 'lens-accelerate-0.1.0.0'
+- 'libffi-0.1'
+- 'linear-1.20.7'
+- 'linear-accelerate-0.5'
+- 'llvm-hs-4.2.0'
+- 'llvm-hs-pure-4.1.0.0'
+- 'math-functions-0.2.1.0'
+- 'mtl-2.2.1'
+- 'mwc-random-0.13.6.0'
+- 'parallel-3.2.1.1'
+- 'prelude-extras-0.4.0.3'
+- 'primitive-0.6.2.0'
+- 'profunctors-5.2.1'
+- 'random-1.1'
+- 'reflection-2.1.2'
+- 'scientific-0.3.5.1'
+- 'semigroupoids-5.2.1'
+- 'semigroups-0.18.3'
+- 'StateVar-1.1.0.4'
+- 'stm-2.4.4.1'
+- 'tagged-0.8.5'
+- 'text-1.2.2.2'
+- 'th-abstraction-0.2.5.0'
+- 'transformers-compat-0.5.1.4'
+- 'unique-0'
+- 'unordered-containers-0.2.8.0'
+- 'utf8-string-1.0.1.1'
+- 'vector-0.12.0.1'
+- 'vector-th-unbox-0.2.1.6'
+- 'void-0.7.2'
+
+# Override default flag values for local packages and extra-deps
+flags:
+  lulesh-accelerate:
+    llvm-cpu: true
+    llvm-gpu: true
+    visit: false
+
+# Extra package databases containing global packages
+extra-package-dbs: []
+
+# Extra global and per-package GHC options
+ghc-options:
+  '*': -fdiagnostics-color=always
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: >= 0.1.4.0
+
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+
+# Extra directories used by stack for building
+# extra-include-dirs:
+# - '/usr/local/silo/include'
+
+# extra-lib-dirs:
+# - '/usr/local/silo/lib'
+# - '/usr/local/homebrew/lib'
+
