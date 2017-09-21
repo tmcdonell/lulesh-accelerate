@@ -6,32 +6,12 @@ resolver: ghc-8.2
 packages:
 - '.'
 
-- location:
-    git:    https://github.com/tmcdonell/accelerate.git
-    commit: aee5f0232e2cfdcf030e2a7ca0570e9ced017d63
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/accelerate-llvm.git
-    commit: 3bc4216e527fa77149259dd19d3d4103ffed9518
-  extra-dep: true
-  subdirs:
-    - 'accelerate-llvm'
-    - 'accelerate-llvm-native'
-    - 'accelerate-llvm-ptx'
-
-- location:
-    git:    https://github.com/tmcdonell/cuda.git
-    commit: c39da756025d7a6fd9fb3fd368736ee05ced5df2
-  extra-dep: true
-
-- location:
-    git:    https://github.com/tmcdonell/nvvm.git
-    commit: 632323e2a7c3c75bb07a3edb35de47273dc4cd07
-  extra-dep: true
-
 extra-deps:
 - 'abstract-deque-0.3'
+- 'accelerate-1.1.0.0'
+- 'accelerate-llvm-1.1.0.0'
+- 'accelerate-llvm-native-1.1.0.0'
+- 'accelerate-llvm-ptx-1.1.0.0'
 - 'adjunctions-4.3'
 - 'ansi-terminal-0.6.3.1'
 - 'ansi-wl-pprint-0.6.8.1'
@@ -47,6 +27,7 @@ extra-deps:
 - 'chaselev-deque-0.5.0.5'
 - 'comonad-5.0.2'
 - 'contravariant-1.4'
+- 'cuda-0.8.0.0'
 - 'data-default-class-0.1.2.0'
 - 'distributive-0.5.3'
 - 'dlist-0.8.0.3'
@@ -70,6 +51,7 @@ extra-deps:
 - 'math-functions-0.2.1.0'
 - 'mtl-2.2.1'
 - 'mwc-random-0.13.6.0'
+- 'nvvm-0.8.0.0'
 - 'parallel-3.2.1.1'
 - 'prelude-extras-0.4.0.3'
 - 'primitive-0.6.2.0'
@@ -94,11 +76,7 @@ extra-deps:
 - 'void-0.7.2'
 
 # Override default flag values for local packages and extra-deps
-flags:
-  lulesh-accelerate:
-    llvm-cpu: true
-    llvm-gpu: true
-    visit: false
+flags: {}
 
 # Extra package databases containing global packages
 extra-package-dbs: []
