@@ -2,7 +2,7 @@ name:                   lulesh-accelerate
 version:                0.1.0.0
 synopsis:               Accelerate implementation of LULESH
 description:
-    Implementation of the Livermore Unstructure Lagrangian Explicit Shock
+    Implementation of the Livermore Unstructured Lagrangian Explicit Shock
     Hydronamics (LULESH) application using Accelerate.
     .
     LULESH represents a typical hydrodynamics code such as
