@@ -24,12 +24,11 @@ Macbook Pro 10,1 (Mid 2012)
 
 | Implementation | Compiler | Time (s) | SLOC |
 -----------------|----------|---------:|-----:|
-| [LULESH-OMP.cc](reference/C/LULESH-OMP.cc) | Clang 3.9.0 | 16.7 | 2400 |
-| [LULESH-OMP.cc](reference/C/LULESH-OMP.cc) | ICC 16.0.4 | 16.6 | 2400 |
+| [LULESH-OMP.cc](reference/C/LULESH-OMP.cc) | Clang 5.0 | 15.1 | 2400 |
+| [LULESH-OMP.cc](reference/C/LULESH-OMP.cc) | ICC 17.0.1 | 14.4 | 2400 |
 | [CUDA](reference/CUDA/lulesh-kepler-singlegpu) | CUDA 8.0.46 | 8.82 | 3000 |
-| [accelerate-llvm-native](https://github.com/AccelerateHS/accelerate-llvm) | GHC 7.10.3, LLVM 3.9 | 9.30 | 1200 |
-| [accelerate-llvm-ptx](https://github.com/AccelerateHS/accelerate-llvm) | GHC 7.10.3, LLVM 3.9 (NVPTX) | 10.35 | 1200 |
-| [accelerate-llvm-ptx](https://github.com/AccelerateHS/accelerate-llvm) | GHC 7.10.3, LLVM 3.8 (NVVM) | 9.82 | 1200 |
+| [accelerate-llvm-native-1.1.0.0](http://hackage.haskell.org/package/accelerate-llvm-native-1.1.0.0) | GHC 8.2.1, LLVM 5.0 | 6.28 | 1200 |
+| [accelerate-llvm-ptx-1.1.0.0](http://hackage.haskell.org/package/accelerate-llvm-ptx-1.1.0.0) | GHC 8.2.1, LLVM 5.0 | 8.35 | 1200 |
 
 
   [accelerate]:         https://github.com/AccelerateHS/accelerate
