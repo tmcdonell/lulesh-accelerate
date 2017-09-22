@@ -27,6 +27,8 @@ matrix:
       # - llvm-toolchain-trusty-4.0  # not white-listed yet
       - sourceline: 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-4.0 main'
         key_url: 'http://apt.llvm.org/llvm-snapshot.gpg.key'
+      - sourceline: 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main'
+        key_url: 'http://apt.llvm.org/llvm-snapshot.gpg.key'
 
     packages: &apt_packages
       - alex-3.1.4
@@ -36,10 +38,10 @@ matrix:
       - libhdf5-openmpi-dev
       - libsilo-dev
       - libsiloh5-0
-      - llvm-4.0-dev
+      - llvm-5.0-dev
 
   include:
-    - env: GHC=7.10.3 CABAL=1.22 LLVM=4.0.0 CUDA=8.0.61-1
+    - env: GHC=7.10.3 CABAL=1.22 LLVM-5.0.0 CUDA=8.0.61-1
       compiler: "GHC 7.10"
       addons:
         apt:
@@ -48,7 +50,7 @@ matrix:
             - *apt_packages
             - cabal-install-1.22
 
-    - env: GHC=8.0.2 CABAL=1.24 LLVM=4.0.0 CUDA=8.0.61-1
+    - env: GHC=8.0.2 CABAL=1.24 LLVM-5.0.0 CUDA=8.0.61-1
       compiler: "GHC 8.0"
       addons:
         apt:
@@ -57,7 +59,7 @@ matrix:
             - *apt_packages
             - cabal-install-1.24
 
-    - env: GHC=8.2.1 CABAL=2.0 LLVM=4.0.0 CUDA=8.0.61-1
+    - env: GHC=8.2.1 CABAL=2.0 LLVM-5.0.0 CUDA=8.0.61-1
       compiler: "GHC 8.2"
       addons:
         apt:

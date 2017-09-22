@@ -7,15 +7,17 @@ packages:
 - '.'
 
 extra-deps:
-- 'Cabal-2.0.0.2'
 - 'accelerate-1.1.0.0'
 - 'accelerate-llvm-1.1.0.0'
 - 'accelerate-llvm-native-1.1.0.0'
 - 'accelerate-llvm-ptx-1.1.0.0'
+- 'Cabal-2.0.0.2'
 - 'cuda-0.8.0.0'
-- 'nvvm-0.8.0.0'
 - 'lens-accelerate-0.1.0.0'
 - 'linear-accelerate-0.5'
+- 'llvm-hs-5.0.0'
+- 'llvm-hs-pure-5.0.0'
+- 'nvvm-0.8.0.0'
 
 # Override default flag values for local packages and extra-deps
 flags: {}
