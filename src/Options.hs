@@ -13,7 +13,9 @@ import System.Environment
 import System.Console.GetOpt
 import Text.PrettyPrint.ANSI.Leijen
 
+#if !MIN_VERSION_accelerate(1,2,0)
 import Data.Array.Accelerate.Debug
+endif
 
 
 data Options = Options
@@ -123,7 +125,9 @@ fancyHeader opts hdr ftr = intercalate "\n" (hdr ++ body ++ ftr)
 --
 parseArgs :: IO (Options, [String])
 parseArgs = do
+#if !MIN_VERSION_accelerate(1,2,0)
   accInit
+#endif
   args <- getArgs
 
   let
