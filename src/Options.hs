@@ -15,7 +15,7 @@ import Text.PrettyPrint.ANSI.Leijen
 
 #if !MIN_VERSION_accelerate(1,2,0)
 import Data.Array.Accelerate.Debug
-endif
+#endif
 
 
 data Options = Options
