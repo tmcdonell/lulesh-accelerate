@@ -10,13 +10,13 @@ sudo: required
 
 cache:
   directories:
-    - $HOME/.stack
-    - $HOME/llvm
-    - .stack-work/install
+    - $HOME/.stack/snapshots
+    # - $HOME/llvm
+    # - .stack-work/install
 
-before_cache:
-  - rm -rf $(stack path --local-install-root)/bin/lulesh-accelerate
-  - rm -rf $(stack path --local-install-root)/doc
+# before_cache:
+#   - rm -rf $(stack path --local-install-root)/bin/lulesh-accelerate
+#   - rm -rf $(stack path --local-install-root)/doc
 
 matrix:
   apt:
@@ -95,7 +95,7 @@ install:
       if [ ${GHC} == head -o ! -e stack.yaml ]; then
         travis_retry cabal install --only-dependencies || exit 1
       else
-        travis_retry stack build --only-dependencies --fast --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit --ghc-options="-j +RTS -A128M -n4m -RTS" || exit 1
+        travis_retry stack build --only-dependencies --fast --jobs=2 --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit || exit 1
       fi
 
 script:
@@ -104,7 +104,7 @@ script:
         cabal install || exit 1
         cabal haddock || exit 1
       else
-        stack build --fast --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit || exit 1
+        stack build --fast --jobs=2 --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit || exit 1
       fi
 
 after_success:
