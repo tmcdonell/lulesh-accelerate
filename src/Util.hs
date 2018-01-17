@@ -9,7 +9,7 @@ module Util where
 import Type
 
 import Prelude                                          as P ( fromInteger, (==) )
-import Data.Array.Accelerate                            as A hiding ( transpose, (==) )
+import Data.Array.Accelerate                            as A hiding ( fromInteger, transpose, (==) )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
 

@@ -22,7 +22,7 @@ import Domain
 import Type
 import Util
 
-import Data.Array.Accelerate                            as A hiding ( transpose )
+import Data.Array.Accelerate                            as A hiding ( transpose, fromInteger )
 import Data.Array.Accelerate.Linear                     as L hiding ( Epsilon )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
