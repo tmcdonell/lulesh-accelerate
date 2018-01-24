@@ -6,16 +6,7 @@ resolver: lts-10.0
 packages:
 - '.'
 
-extra-deps:
-- git:    https://github.com/tmcdonell/accelerate.git
-  commit: c6d87eeec0974b6cb39ecba60628a8dd52331812
-
-- git:    https://github.com/tmcdonell/accelerate-llvm.git
-  commit: 62f2f658a4ae1f71e8046bbf883b7dad35401824
-  subdirs:
-    - accelerate-llvm
-    - accelerate-llvm-native
-    - accelerate-llvm-ptx
+extra-deps: []
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
