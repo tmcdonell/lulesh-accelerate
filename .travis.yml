@@ -4,15 +4,14 @@
 # relevant version of LLVM as (a very old version of) the CUDA toolkit (4.0).
 # Caches the 'stack' build directory to speed subsequent compilations.
 #
-language: generic
+language: minimal
 dist: trusty
 sudo: required
 
 cache:
   directories:
     - $HOME/.stack/snapshots
-    # - $HOME/llvm
-    # - .stack-work/install
+    - .stack-work/install
 
 # before_cache:
 #   - rm -rf $(stack path --local-install-root)/bin/lulesh-accelerate
@@ -24,11 +23,8 @@ matrix:
       - hvr-ghc
       - ubuntu-toolchain-r-test
       - llvm-toolchain-trusty
-      # - llvm-toolchain-trusty-4.0  # not white-listed yet
-      - sourceline: 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-4.0 main'
-        key_url: 'http://apt.llvm.org/llvm-snapshot.gpg.key'
-      - sourceline: 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main'
-        key_url: 'http://apt.llvm.org/llvm-snapshot.gpg.key'
+      - llvm-toolchain-trusty-5.0
+      - llvm-toolchain-trusty-6.0
 
     packages: &apt_packages
       - alex-3.1.4
@@ -38,7 +34,6 @@ matrix:
       - libhdf5-openmpi-dev
       - libsilo-dev
       - libsiloh5-0
-      - llvm-5.0-dev
 
   include:
     - env: GHC=7.10.3 CABAL=1.22 LLVM-5.0.0 CUDA=8.0.61-1
@@ -49,6 +44,7 @@ matrix:
           packages:
             - *apt_packages
             - cabal-install-1.22
+            - llvm-5.0-dev
 
     - env: GHC=8.0.2 CABAL=1.24 LLVM-5.0.0 CUDA=8.0.61-1
       compiler: "GHC 8.0"
@@ -58,6 +54,7 @@ matrix:
           packages:
             - *apt_packages
             - cabal-install-1.24
+            - llvm-5.0-dev
 
     - env: GHC=8.2.2 CABAL=2.0 LLVM-5.0.0 CUDA=8.0.61-1
       compiler: "GHC 8.2"
@@ -67,6 +64,17 @@ matrix:
           packages:
             - *apt_packages
             - cabal-install-2.0
+            - llvm-5.0-dev
+
+    - env: GHC=8.4.1 CABAL=2.0 LLVM-6.0.0 CUDA=8.0.61-1
+      compiler: "GHC 8.4"
+      addons:
+        apt:
+          sources: *apt_sources
+          packages:
+            - *apt_packages
+            - cabal-install-2.0
+            - llvm-6.0-dev
 
   fast_finish: true
 
@@ -86,26 +94,16 @@ before_install:
   - travis_retry stack install c2hs --fast --no-terminal
 
 install:
-  - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
   - cabal --version
   - stack --version
   - llc --version; true
   - opt --version; true
-  - |
-      if [ ${GHC} == head -o ! -e stack.yaml ]; then
-        travis_retry cabal install --only-dependencies || exit 1
-      else
-        travis_retry stack build --only-dependencies --fast --jobs=2 --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit || exit 1
-      fi
+  - stack build --dry-run
+  - travis_retry stack build --only-dependencies --fast --jobs=2 --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit
 
 script:
-  - |
-      if [ ${GHC} == head -o ! -e stack.yaml ]; then
-        cabal install || exit 1
-        cabal haddock || exit 1
-      else
-        stack build --fast --jobs=2 --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit || exit 1
-      fi
+  - stack build --fast --jobs=2 --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit
 
 after_success:
   - source .travis/update-accelerate-buildbot.sh
