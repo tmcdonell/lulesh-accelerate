@@ -100,7 +100,7 @@ install:
   - llc --version; true
   - opt --version; true
   - stack build --dry-run
-  - travis_retry stack build --only-dependencies --fast --jobs=2 --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit
+  - travis_retry travis_wait 60 stack build --only-dependencies --fast --jobs=2 --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit
 
 script:
   - stack build --fast --jobs=2 --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit
