@@ -48,12 +48,14 @@ Executable lulesh-accelerate
   main-is:              Main.hs
   other-modules:        Backend Domain Init LULESH Options Timing Type Util VisIt
 
-  ghc-options:          -O2
-                        -Wall
-                        -threaded
-                        -rtsopts
-                        -with-rtsopts=-n2M
-                        -with-rtsopts=-A64M
+  ghc-options:
+        -Wall
+        -O2
+        -threaded
+        -rtsopts
+        -with-rtsopts=-n2M
+        -with-rtsopts=-A64M
+        -feager-blackholing
 
   if impl(ghc >= 8.0)
     ghc-options:        -freduction-depth=30
