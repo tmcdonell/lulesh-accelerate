@@ -62,7 +62,7 @@ Executable lulesh-accelerate
 
   default-language:     Haskell2010
   build-depends:
-      base                      >= 4.6 && < 4.12
+      base                      >= 4.6 && < 5
     , accelerate                >= 1.0
     , ansi-wl-pprint            >= 0.6
     , lens                      >= 4
