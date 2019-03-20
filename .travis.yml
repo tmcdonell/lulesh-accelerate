@@ -6,11 +6,11 @@
 #
 language: minimal
 dist: trusty
-sudo: required
 
 cache:
   directories:
     - $HOME/.stack/snapshots
+    - $HOME/.local/bin
     - .stack-work/install
 
 # before_cache:
@@ -23,12 +23,11 @@ matrix:
       - hvr-ghc
       - ubuntu-toolchain-r-test
       - llvm-toolchain-trusty
-      - llvm-toolchain-trusty-5.0
-      - llvm-toolchain-trusty-6.0
-
     packages: &apt_packages
       - alex-3.1.4
-      - g++-4.8
+      - dpkg
+      - g++-8
+      - gcc-8
       - happy-1.19.5
       - libgmp-dev
       - libhdf5-openmpi-dev
@@ -36,74 +35,67 @@ matrix:
       - libsiloh5-0
 
   include:
-    - env: GHC=7.10.3 CABAL=1.22 LLVM-5.0.0 CUDA=8.0.61-1
-      compiler: "GHC 7.10"
+    - env: GHC=8.6.4 LLVM=7.0.1
+      compiler: "GHC 8.6"
       addons:
         apt:
-          sources: *apt_sources
+          sources:
+            - *apt_sources
+            - llvm-toolchain-trusty-7
           packages:
             - *apt_packages
-            - cabal-install-1.22
-            - llvm-5.0-dev
+            - llvm-7-dev
 
-    - env: GHC=8.0.2 CABAL=1.24 LLVM-5.0.0 CUDA=8.0.61-1
-      compiler: "GHC 8.0"
-      addons:
-        apt:
-          sources: *apt_sources
-          packages:
-            - *apt_packages
-            - cabal-install-1.24
-            - llvm-5.0-dev
-
-    - env: GHC=8.2.2 CABAL=2.0 LLVM-5.0.0 CUDA=8.0.61-1
-      compiler: "GHC 8.2"
-      addons:
-        apt:
-          sources: *apt_sources
-          packages:
-            - *apt_packages
-            - cabal-install-2.0
-            - llvm-5.0-dev
-
-    - env: GHC=8.4.1 CABAL=2.0 LLVM-6.0.0 CUDA=8.0.61-1
+    - env: GHC=8.4.3 LLVM=6.0.1
       compiler: "GHC 8.4"
       addons:
         apt:
           sources: *apt_sources
           packages:
             - *apt_packages
-            - cabal-install-2.0
             - llvm-6.0-dev
+
+    - env: GHC=8.2.2 LLVM-5.0.2
+      compiler: "GHC 8.2"
+      addons:
+        apt:
+          sources: *apt_sources
+          packages:
+            - *apt_packages
+            - llvm-5.0-dev
 
   fast_finish: true
 
 before_install:
-  - export PATH=/opt/cabal/$CABAL/bin:/opt/alex/3.1.4/bin:/opt/happy/1.19.5/bin:$HOME/.cabal/bin:$PATH
-  # - |
-  #     case ${GHC} in
-  #       7.8.*) export UPGRADE_CABAL=1 ;;
-  #     esac
-  # - |
-  #     case ${LLVM} in
-  #       3.5.*) source .travis/install-llvm-trusty.sh ;;
-  #     esac
-  # - source .travis/install-cuda-trusty.sh
+  - export PATH=/opt/alex/3.1.4/bin:/opt/happy/1.19.5/bin:$PATH
   - source .travis/install-stack.sh
-  - source .travis/update-ghc-settings.sh
-  - travis_retry stack install c2hs --fast --no-terminal
+
+  # llvm-hs requires new g++
+  - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 60 --slave /usr/bin/g++ g++ /usr/bin/g++-8
+
+  # ghc-8.4+ require libffi7
+  - echo "deb http://deb.debian.org/debian experimental main" | sudo tee -a /etc/apt/sources.list
+  - sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-key 0x7638D0442B90D010 0x8B48AD6246925553 0x04EE7237B7D453EC
+  - sudo apt-get install debian-archive-keyring
+  - sudo apt-get update
+  - sudo apt-get install libffi7
+
+  # build environment
+  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
+  - stack --version
+  - llc-${LLVM:0:3} --version; true
+  - opt-${LLVM:0:3} --version; true
 
 install:
-  - echo "$(stack exec ghc -- --version) [$(stack exec ghc -- --print-project-git-commit-id 2> /dev/null || echo '?')]"
-  - cabal --version
-  - stack --version
-  - llc --version; true
-  - opt --version; true
-  - stack build --dry-run
-  - travis_retry travis_wait 60 stack build --only-dependencies --fast --jobs=2 --no-terminal --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit
+  # how much do we have to do?
+  - export FLAGS="--fast --jobs=2 --no-terminal --no-copy-bins --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit"
+  - stack build $FLAGS --only-dependencies --dry-run
+
+  # build dependencies
+  - travis_retry travis_wait 60 stack build $FLAGS --only-dependencies
 
 script:
-  - stack build --fast --jobs=2 --no-terminal --haddock --no-haddock-deps --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit
+  - stack build $FLAGS
 
 after_success:
   - source .travis/update-accelerate-buildbot.sh
