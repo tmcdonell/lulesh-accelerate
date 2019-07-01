@@ -2,7 +2,7 @@
 {-# LANGUAGE CPP             #-}
 {-# LANGUAGE GADTs           #-}
 {-# LANGUAGE TemplateHaskell #-}
-#ifdef ACCELERATE_LLVM_NATIVE_BACKEND
+#if defined(ACCELERATE_LLVM_NATIVE_BACKEND) && __GLASGOW_HASKELL__ < 806
 {-# OPTIONS_GHC -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin #-}
 #endif
 -- |

@@ -88,7 +88,7 @@ Executable lulesh-accelerate
     -- >   (GHC version 7.10.3 for x86_64-unknown-linux):
     -- >        Loading temp shared object failed: /tmp/ghc19665_0/libghc_6.so: undefined symbol: Silo_version_4_10_2
     --
-    if impl(ghc >= 8.0)
+    if impl(ghc >= 8.0) && impl(ghc < 8.6)
       ghc-options:      -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin
 
   if flag(llvm-ptx)
