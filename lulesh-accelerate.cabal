@@ -100,6 +100,6 @@ Executable lulesh-accelerate
     cpp-options:        -DACCELERATE_VISIT
     cc-options:         -fPIC
     c-sources:          cbits/visit.cc
-    extra-libraries:    siloh5 hdf5
+    extra-libraries:    siloh5 hdf5_serial
 
 -- vim: nospell
