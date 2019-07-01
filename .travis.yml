@@ -1,18 +1,14 @@
 # vim: nospell
 #
-# Basic template to test with GHC=[7.8, 7.10, 8.0], but also installs the
-# relevant version of LLVM as (a very old version of) the CUDA toolkit (4.0).
-# Caches the 'stack' build directory to speed subsequent compilations.
-#
 language: minimal
-dist: trusty
+dist: xenial
 
 cache:
   timeout: 600
   directories:
-    - $HOME/.stack/snapshots
+    - $HOME/.stack
     - $HOME/.local/bin
-    - .stack-work/install
+    - $TRAVIS_BUILD_DIR/.stack-work
 
 before_cache:
   # - rm -rf $(stack path --local-install-root)/bin
@@ -23,7 +19,7 @@ addons:
     sources: &apt_sources
       - hvr-ghc
       - ubuntu-toolchain-r-test
-      - llvm-toolchain-trusty
+
     packages: &apt_packages
       - alex-3.1.7
       - dpkg
@@ -31,23 +27,23 @@ addons:
       - gcc-8
       - happy-1.19.5
       - libgmp-dev
-      - libhdf5-openmpi-dev
+      - libhdf5-dev
       - libsilo-dev
       - libsiloh5-0
 
 matrix:
   fast_finish: true
   include:
-    - env: GHC=8.6.4 LLVM=7.0.1
+    - env: GHC=8.6.4 LLVM=8.0.0
       compiler: "GHC 8.6"
       addons:
         apt:
           sources:
             - *apt_sources
-            - llvm-toolchain-trusty-7
+            - llvm-toolchain-xenial-8
           packages:
             - *apt_packages
-            - llvm-7-dev
+            - llvm-8-dev
 
     - env: GHC=8.4.3 LLVM=6.0.1
       compiler: "GHC 8.4"
@@ -55,7 +51,7 @@ matrix:
         apt:
           sources:
             - *apt_sources
-            - llvm-toolchain-trusty-6.0
+            - llvm-toolchain-xenial-6.0
           packages:
             - *apt_packages
             - llvm-6.0-dev
@@ -66,7 +62,7 @@ matrix:
         apt:
           sources:
             - *apt_sources
-            - llvm-toolchain-trusty-5.0
+            - llvm-toolchain-xenial-5.0
           packages:
             - *apt_packages
             - llvm-5.0-dev
@@ -93,11 +89,11 @@ before_install:
 
 install:
   # how much do we have to do?
-  - export FLAGS="--fast --jobs=2 --no-terminal --no-copy-bins --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit"
+  - export FLAGS="--fast --jobs=2 --no-terminal --no-copy-bins --no-interleaved-output --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit"
   - stack build $FLAGS --only-dependencies --dry-run
 
   # build dependencies
-  - travis_retry travis_wait 60 stack build $FLAGS --only-dependencies
+  - travis_retry stack build $FLAGS --only-dependencies
 
 script:
   - stack build $FLAGS
