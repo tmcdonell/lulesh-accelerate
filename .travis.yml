@@ -89,7 +89,7 @@ before_install:
 
 install:
   # how much do we have to do?
-  - export FLAGS="--fast --jobs=2 --no-terminal --no-copy-bins --no-interleaved-output --flag lulesh-accelerate:-llvm-gpu --flag lulesh-accelerate:visit"
+  - export FLAGS="--fast --jobs=2 --no-terminal --no-copy-bins --no-interleaved-output --flag lulesh-accelerate:-llvm-ptx --flag lulesh-accelerate:visit"
   - stack build $FLAGS --only-dependencies --dry-run
 
   # build dependencies
