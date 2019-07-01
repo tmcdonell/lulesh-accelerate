@@ -34,7 +34,7 @@ Flag llvm-cpu
   Description:          Enable the LLVM backend for multicore CPUs
   Default:              True
 
-Flag llvm-gpu
+Flag llvm-ptx
   Description:          Enable the LLVM backend for NVIDIA CPUs
   Default:              True
 
@@ -91,7 +91,7 @@ Executable lulesh-accelerate
     if impl(ghc >= 8.0)
       ghc-options:      -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin
 
-  if flag(llvm-gpu)
+  if flag(llvm-ptx)
     cpp-options:        -DACCELERATE_LLVM_PTX_BACKEND
     build-depends:
         accelerate-llvm-ptx     >= 1.1.0.0
