@@ -93,7 +93,7 @@ install:
   - stack build $FLAGS --only-dependencies --dry-run
 
   # build dependencies
-  - travis_retry stack build $FLAGS --only-dependencies
+  - travis_retry travis_wait 60 stack build $FLAGS --only-dependencies
 
 script:
   - stack build $FLAGS
