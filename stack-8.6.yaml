@@ -1,17 +1,17 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-13.25
+resolver: lts-14.27
 
 packages:
 - .
 
 extra-deps:
 - github: tmcdonell/accelerate
-  commit: 1010d97f8cc8cbecff28200cf6e176455769c644
+  commit: da18b951f85c969971929199e0b03114ff210b6c
 
 - github: tmcdonell/accelerate-llvm
-  commit: 60b0ebc38549e887159e0bec7493fad2231a2550
+  commit: 04b8107c16412368cdc65ea0cc491d0ca9bf0683
   subdirs:
     - accelerate-llvm
     - accelerate-llvm-native
@@ -21,7 +21,7 @@ extra-deps:
   commit: b74eb8098735b1ad6cff3c5655af03d3f29b9f8e
 
 - github: tmcdonell/linear-accelerate
-  commit: 7d3bb1d40cdcc75f2f658c31b2eb7541c949e52e
+  commit: 2f4dfe92854f53c2aac9be51c9da25899a659273
 
 - cuda-0.10.1.0
 - hedgehog-1.0
@@ -30,7 +30,11 @@ extra-deps:
 - tasty-hedgehog-1.0.0.1
 
 # Override default flag values for local packages and extra-deps
-# flags: {}
+# flags:
+#   lulesh-accelerate:
+#     llvm-ptx: true
+#     llvm-cpu: true
+#     visit: false
 
 # Extra global and per-package GHC options
 # ghc-options: {}
