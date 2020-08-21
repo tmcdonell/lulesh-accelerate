@@ -1,23 +1,33 @@
 # For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 # vim: nospell
 
-resolver: lts-12.26
+resolver: lts-16.10
 
 packages:
 - .
 
 extra-deps:
-- accelerate-1.2.0.1
-- accelerate-llvm-1.2.0.0
-- accelerate-llvm-native-1.2.0.0
-- accelerate-llvm-ptx-1.2.0.0
-- cuda-0.9.0.3
-- lens-accelerate-0.2.0.0
-- linear-accelerate-0.6.0.0
-- llvm-hs-6.0.0
-- llvm-hs-pure-6.0.0
-- nvvm-0.8.0.3
-- tasty-hedgehog-0.2.0.0
+- github: tmcdonell/accelerate
+  commit: b54ce53cff506ba9e9edab21f7a37c3dfbd96173
+
+- github: tmcdonell/accelerate-llvm
+  commit: b2862f43ad89b74236d6d9bb91b655c2262e1125
+  subdirs:
+    - accelerate-llvm
+    - accelerate-llvm-native
+    - accelerate-llvm-ptx
+
+- github: tmcdonell/lens-accelerate
+  commit: 4a652bc0f0574cd5e715b2f523a41107a11dbcbe
+
+- github: tmcdonell/linear-accelerate
+  commit: e0956017d938a05f2ef4180b364f4d2cd71eb5b9
+
+- github: tmcdonell/cuda
+  commit: 1128c99c2e7a41b5e21363a9bf12c7bb240184ac
+
+- github: tmcdonell/nvvm
+  commit: 4b0ee7b1644a71f56a4d024dda3d40f225ac1f05
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

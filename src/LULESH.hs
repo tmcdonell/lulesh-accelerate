@@ -22,7 +22,7 @@ import Domain
 import Type
 import Util
 
-import Data.Array.Accelerate                            as A hiding ( transpose, fromInteger )
+import Data.Array.Accelerate                            as A hiding ( transpose, fromInteger, V3, V4 )
 import Data.Array.Accelerate.Linear                     as L hiding ( Epsilon )
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9, at, ix, use )
 
@@ -1200,11 +1200,11 @@ timeIncrement' Parameters{..} t_now dt_old dt_courant dt_hydro =
       c3        = if dt_hydro   < c2 then 2/3 * dt_hydro   else c2
 
       ratio     = c3 / dt_old
-      dt_new    = caseof ratio
-                [ (\r -> r >= 1 && r < lb, dt_old)
-                , (\r -> r >= 1 && r > ub, dt_old * ub)
-                ]
-                c3
+      dt_new    = if ratio >= 1 && ratio < lb
+                     then dt_old
+                     else if ratio >= 1 && ratio > ub
+                             then dt_old * ub
+                             else c3
 
       -- compute timestep and the new simulation time
       dt'       = A.min step target

@@ -34,6 +34,28 @@ addons:
 matrix:
   fast_finish: true
   include:
+    - env: GHC=8.10.2 LLVM=9.0.1
+      compiler: "GHC 8.10"
+      addons:
+        apt:
+          sources:
+            - *apt_sources
+            - llvm-toolchain-xenial-9
+          packages:
+            - *apt_packages
+            - llvm-9-dev
+
+    - env: GHC=8.8.3 LLVM=9.0.1
+      compiler: "GHC 8.8"
+      addons:
+        apt:
+          sources:
+            - *apt_sources
+            - llvm-toolchain-xenial-9
+          packages:
+            - *apt_packages
+            - llvm-9-dev
+
     - env: GHC=8.6.5 LLVM=8.0.1
       compiler: "GHC 8.6"
       addons:
@@ -44,28 +66,6 @@ matrix:
           packages:
             - *apt_packages
             - llvm-8-dev
-
-    - env: GHC=8.4.3 LLVM=6.0.1
-      compiler: "GHC 8.4"
-      addons:
-        apt:
-          sources:
-            - *apt_sources
-            - llvm-toolchain-xenial-6.0
-          packages:
-            - *apt_packages
-            - llvm-6.0-dev
-
-    - env: GHC=8.2.2 LLVM-5.0.2
-      compiler: "GHC 8.2"
-      addons:
-        apt:
-          sources:
-            - *apt_sources
-            - llvm-toolchain-xenial-5.0
-          packages:
-            - *apt_packages
-            - llvm-5.0-dev
 
 before_install:
   - export PATH=/opt/alex/3.1.7/bin:/opt/happy/1.19.5/bin:$PATH

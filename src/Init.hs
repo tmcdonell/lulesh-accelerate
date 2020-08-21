@@ -6,7 +6,7 @@ module Init where
 import Options
 import Type
 
-import Data.Array.Accelerate                    as A hiding ( fromInteger )
+import Data.Array.Accelerate                    as A hiding ( fromInteger, V3 )
 import Data.Array.Accelerate.Linear             as A
 
 import Prelude                                  ( fromInteger )
