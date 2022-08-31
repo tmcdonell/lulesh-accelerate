@@ -42,7 +42,6 @@ import Data.Array.Accelerate                            as A hiding ( Ord(..), V
 import Data.Array.Accelerate.Sugar.Shape                as S
 import Data.Array.Accelerate.Linear                     as A
 import Data.Array.Accelerate.Control.Lens               as L hiding ( _1, _2, _3, _4, _5, _6, _7, _8, _9 )
-import Data.Array.Accelerate.Debug                      ( beginMonitoring )
 
 import Prelude                                          as P
 import System.IO
@@ -60,7 +59,6 @@ import qualified Data.Array.Accelerate.LLVM.PTX         as PTX
 
 main :: IO ()
 main = do
-  beginMonitoring
   (opts,_)      <- parseArgs
 
   let backend   = opts ^. optBackend
