@@ -196,10 +196,10 @@ calcVolumeForceForElems param x dx p q v v0 ss mZ =
                         $ \ix -> calcHourglassControlForElem param
                                     (collectToElem x  ix)
                                     (collectToElem dx ix)
-                                    (v !ix)
-                                    (v0!ix)
-                                    (ss!ix)
-                                    (mZ!ix)
+                                    (v  ! ix)
+                                    (v0 ! ix)
+                                    (ss ! ix)
+                                    (mZ ! ix)
 
       -- Combine the nodal force contributions
       combine :: Exp (Hexahedron Force) -> Exp (Hexahedron Force) -> Exp (Hexahedron Force)
@@ -659,8 +659,8 @@ calcLagrangeElements dt x dx v v0 =
         $ \ix -> calcKinematicsForElem dt
                     (collectToElem x  ix)
                     (collectToElem dx ix)
-                    (v !ix)
-                    (v0!ix)
+                    (v  ! ix)
+                    (v0 ! ix)
 
       -- TODO: Check for negative element volume
       _volumeError = A.any (<= 0) v'
@@ -832,8 +832,8 @@ calcQForElems params x dx v v0 mZ vdov =
         $ \ix -> calcMonotonicQGradientsForElem
                     (collectToElem x  ix)
                     (collectToElem dx ix)
-                    (v !ix)
-                    (v0!ix)
+                    (v  ! ix)
+                    (v0 ! ix)
 
       -- Transfer velocity gradients in the first order elements
       (ql, qq)
